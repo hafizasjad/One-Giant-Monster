@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>One Giant Monster</title>
+  <style>
+    :root { --ink: #2a1b4d; --purple: #7c5cff; --pink: #ff4f8b; --yellow: #ffd23f; --paper: #fffaf0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #8fdcff; color: var(--ink);
+      font-family: "Baloo 2", "Fredoka", "Trebuchet MS", "Segoe UI", system-ui, sans-serif; }
+    #game, #overlay { position: fixed; inset: 0; }
+    #overlay { pointer-events: none; overflow: hidden; }
+    .hidden { display: none !important; }
+
+    .popup { position: absolute; transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)); white-space: nowrap;
+      font-weight: 900; font-size: 26px; color: #fff; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill;
+      animation: pop .3s cubic-bezier(.2, 2.2, .5, 1); }
+    .popup.big { font-size: 46px; color: var(--pink); }
+    .popup.gold { color: var(--yellow); }
+    .popup.green { color: #7dee8b; }
+    .popup.purple { color: #c9b8ff; }
+    @keyframes pop { from { transform: translate(-50%, -50%) scale(.2) rotate(var(--tilt, 0deg)); } }
+
+    .screen { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
+      background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, .25), rgba(42, 27, 77, .45)); }
+    .card { background: var(--paper); border: 5px solid var(--ink); border-radius: 28px; padding: 28px 34px;
+      box-shadow: 0 10px 0 var(--ink); text-align: center; width: min(520px, 100%); }
+    h1 { margin: 0; font-size: clamp(38px, 8vw, 62px); line-height: .95; font-weight: 900; color: var(--purple);
+      -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); transform: rotate(-2deg); }
+    h1 span { color: var(--pink); display: block; }
+    h2 { margin: 0 0 6px; font-size: 32px; font-weight: 900; }
+    p { margin: 10px 0; font-size: 17px; line-height: 1.4; }
+    .muted { opacity: .7; font-size: 15px; }
+    button { font: inherit; font-weight: 800; font-size: 19px; color: var(--ink); background: var(--yellow);
+      border: 4px solid var(--ink); border-radius: 16px; padding: 10px 20px; cursor: pointer;
+      box-shadow: 0 5px 0 var(--ink); transition: transform .08s, box-shadow .08s; }
+    button:hover { transform: translateY(-2px); box-shadow: 0 7px 0 var(--ink); }
+    button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
+    button:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: 0 5px 0 var(--ink); }
+    button:focus-visible, input:focus-visible { outline: 4px solid var(--pink); outline-offset: 3px; }
+    button.alt { background: #fff; }
+    button.on { background: var(--purple); color: #fff; }
+    .stack { display: grid; gap: 14px; margin-top: 22px; }
+    .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    input { font: inherit; font-weight: 900; font-size: 22px; width: 130px; text-align: center; text-transform: uppercase;
+      letter-spacing: 4px; border: 4px solid var(--ink); border-radius: 16px; padding: 8px; background: #fff; color: var(--ink); }
+    .code { font-size: 58px; font-weight: 900; letter-spacing: 10px; color: var(--pink); margin: 4px 0; }
+    .error { color: #d62246; font-weight: 800; min-height: 1.4em; }
+    table { margin: 12px auto; border-collapse: collapse; font-size: 19px; }
+    td { padding: 3px 14px; text-align: left; } td:last-child { text-align: right; font-weight: 900; }
+    .score { font-size: 54px; font-weight: 900; color: var(--purple); }
+
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    .chip { position: absolute; background: var(--paper); border: 4px solid var(--ink); border-radius: 16px;
+      padding: 6px 14px; font-weight: 800; font-size: 18px; box-shadow: 0 4px 0 var(--ink); }
+    #stats { top: 14px; left: 14px; display: flex; gap: 16px; font-variant-numeric: tabular-nums; }
+    #who { top: 14px; right: 14px; text-align: right; }
+    #who button { pointer-events: auto; font-size: 14px; padding: 3px 10px; margin-left: 8px; box-shadow: 0 3px 0 var(--ink); }
+    #chaos { top: 70px; left: 50%; transform: translateX(-50%); background: var(--purple); color: #fff; font-size: 22px; }
+    #chaos.warn { background: var(--yellow); color: var(--ink); animation: wiggle .25s infinite alternate; }
+    @keyframes wiggle { from { transform: translateX(-50%) rotate(-3deg); } to { transform: translateX(-50%) rotate(3deg); } }
+    #power { bottom: 110px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; font-size: 15px; }
+    #power i { display: block; width: 160px; height: 16px; border: 3px solid var(--ink); border-radius: 10px; overflow: hidden; background: #fff; }
+    #power b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--yellow), var(--pink)); }
+    #notice { top: 45%; left: 50%; transform: translate(-50%, -50%); font-size: 22px; text-align: center; max-width: 90vw; }
+    #help { bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 700; display: flex;
+      gap: 22px; max-width: calc(100vw - 28px); flex-wrap: wrap; justify-content: center; }
+    #help b { color: var(--purple); }
+    kbd { background: #fff; border: 2px solid var(--ink); border-radius: 6px; padding: 0 5px; font: inherit; font-size: 13px; }
+    @media (prefers-reduced-motion: reduce) { .popup, #chaos.warn { animation: none; } }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="overlay"></div>
+
+  <div id="hud" class="hidden">
+    <div id="stats" class="chip"><span id="time">0:00.0</span><span id="starsHud">★ 0/8</span><span id="fumblesHud">Oops 0</span></div>
+    <div id="who" class="chip"><span id="whoText"></span><button id="quit" class="alt">Menu</button></div>
+    <div id="chaos" class="chip hidden"></div>
+    <div id="power" class="chip hidden"><span>THROW POWER</span><i><b id="powerFill"></b></i></div>
+    <div id="notice" class="chip hidden"></div>
+    <div id="help" class="chip"></div>
+  </div>
+
+  <div id="menu" class="screen">
+    <div class="card">
+      <h1>One Giant <span>Monster</span></h1>
+      <p>Two players. One wobbly monster. One of you is the <b>legs</b>, the other is the <b>arms</b>. Good luck.</p>
+      <div class="stack">
+        <button id="btnLocal">Play on one keyboard</button>
+        <button id="btnCreate" class="alt">Create online room</button>
+        <div class="row">
+          <input id="joinCode" maxlength="4" placeholder="CODE" aria-label="Room code" autocomplete="off" />
+          <button id="btnJoin" class="alt">Join room</button>
+        </div>
+        <div id="menuError" class="error" role="alert"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lobby" class="screen hidden">
+    <div class="card">
+      <h2 id="lobbyTitle">Room code</h2>
+      <div id="lobbyCode" class="code"></div>
+      <p id="lobbyStatus"></p>
+      <div id="rolePick" class="row">
+        <button id="roleLegs" class="on">I'm the Legs</button>
+        <button id="roleArms" class="alt">I'm the Arms</button>
+      </div>
+      <div class="stack">
+        <button id="btnStart" disabled>Start!</button>
+        <button id="btnLeave" class="alt">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="results" class="screen hidden">
+    <div class="card">
+      <h2 id="rank"></h2>
+      <div id="finalScore" class="score"></div>
+      <table>
+        <tr><td>Time</td><td id="resTime"></td></tr>
+        <tr><td>Stars</td><td id="resStars"></td></tr>
+        <tr><td>Oopsies</td><td id="resFumbles"></td></tr>
+      </table>
+      <p id="resWait" class="muted hidden">Waiting for the host to restart…</p>
+      <div class="row">
+        <button id="btnAgain">Play again</button>
+        <button id="btnMenu" class="alt">Main menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
