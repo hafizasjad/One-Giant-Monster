@@ -74,13 +74,14 @@ export class Arms {
       if (this.held >= 0) {
         this.drop(w);
       } else {
+        // A lever in reach wins over loose things lying next to it.
         const e = w.nearestGrabbable(this.pos, GRAB_RANGE);
-        if (e >= 0) {
+        if (w.leverDistance(this.pos) < LEVER_RANGE) {
+          w.toggleLever();
+        } else if (e >= 0) {
           this.held = e;
           this.charge = 0;
           w.emit('grab', this.pos);
-        } else if (w.leverDistance(this.pos) < LEVER_RANGE) {
-          w.toggleLever();
         } else {
           w.emit('miss', this.pos);
         }

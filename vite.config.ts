@@ -3,7 +3,8 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   server: {
     host: true,
-    port: 5173,
+    // The preview pane passes PORT when 5173 is taken by another project.
+    port: Number(process.env.PORT ?? 5173),
     strictPort: true,
     proxy: {
       '/ws': { target: 'ws://localhost:3001', ws: true },

@@ -109,10 +109,9 @@
     #touch .tb.big { width: 104px; height: 104px; border-radius: 50%; font-size: 22px; grid-column: 1 / -1; justify-self: center; }
     #touch .tb.down { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); background: var(--pink); color: #fff; }
     body.touch #help { display: none; }
-    body.touch #power { bottom: auto; top: 118px; }
+    body.touch #power { bottom: auto; top: 162px; }
     body.touch #abilities { top: 62px; }
-    #rotate { display: none; top: 30%; left: 50%; transform: translateX(-50%); white-space: nowrap; }
-    @media (orientation: portrait) { body.touch #rotate { display: block; } }
+    #hint { top: 112px; left: 50%; transform: translateX(-50%); background: var(--yellow); font-size: 17px; text-align: center; width: max-content; max-width: 92vw; }
 
     @media (max-height: 560px) {
       .card { padding: 14px 22px; width: min(620px, 100%); }
@@ -137,16 +136,17 @@
     <div id="notice" class="chip hidden"><span id="noticeText"></span><button id="btnCarry" class="alt">Carry on without them</button></div>
     <div id="abilities" class="chip"><span id="abRoar">ROAR<i><b></b></i></span><span id="abStomp">STOMP<i><b></b></i></span></div>
     <div id="help" class="chip"></div>
-    <div id="rotate" class="chip">Turn your phone sideways ↻</div>
+    <div id="hint" class="chip hidden"></div>
   </div>
   <div id="touch" class="hidden"></div>
 
   <div id="menu" class="screen">
     <div class="card">
       <h1>One Giant <span>Monster</span></h1>
-      <p>Two to four players. One wobbly monster. You share its <b>legs</b>, <b>arms</b>, <b>head</b> and <b>special powers</b>. Good luck.</p>
+      <p>One wobbly monster, one to four players. You share its <b>legs</b>, <b>arms</b>, <b>head</b> and <b>special powers</b>. Solo, you are the arms and the monster does the rest.</p>
       <div class="stack">
-        <button id="btnLocal">Play on one device</button>
+        <button id="btnSolo">Play solo</button>
+        <button id="btnLocal" class="alt">Play together on one device</button>
         <button id="btnCreate" class="alt">Create online room</button>
         <div class="row">
           <input id="joinCode" maxlength="4" placeholder="CODE" aria-label="Room code" autocomplete="off" />

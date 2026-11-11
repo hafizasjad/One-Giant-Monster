@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { reassign, ROLES, splitRoles, type Inputs, type PeerMsg, type Role, type RoleInput, type RoleMap, type Snapshot } from '../shared/protocol.ts';
 import { Sfx } from './audio/Sfx.ts';
+import { Bots } from './game/Bots.ts';
 import { CHAOS_LABEL } from './game/Chaos.ts';
 import { buildLevel } from './game/level1.ts';
 import { Input } from './input/Input.ts';
@@ -27,13 +28,15 @@ let net: NetClient | null = null;
 /** Players in the room (0 = host). The host keeps this up to date and tells the guests. */
 let players: number[] = [0];
 let roles: RoleMap = splitRoles(players);
+/** One player as the arms, autopilot for the rest. */
+let solo = false;
 let inGame = false;
 let lastSnap: Snapshot | null = null;
 let resultsTimer = 0;
 
 const myId = () => net?.id ?? 0;
 /** The roles played on this machine. */
-const mine = (): Role[] => (mode === 'local' ? ROLES : ROLES.filter((r) => roles[r] === myId()));
+const mine = (): Role[] => (mode === 'local' ? (solo ? ['arms'] : ROLES) : ROLES.filter((r) => roles[r] === myId()));
 const ROLE_NAME: Record<Role, string> = { legs: 'Legs', arms: 'Arms', head: 'Head', special: 'Special' };
 const playerName = (id: number) => (id === myId() ? 'You' : id === 0 ? 'Host' : `Player ${id + 1}`);
 
@@ -123,12 +126,20 @@ function useControls() {
   kb.setRoles(m, mode === 'local');
   refreshHelp();
   const who = m.map((r) => ROLE_NAME[r]).join(' + ') || 'Watching';
-  $('whoText').textContent = mode === 'local' ? 'One device' : `Room ${net!.code} · ${who}`;
+  $('whoText').textContent = mode === 'local' ? (solo ? 'Solo · Arms' : 'One device') : `Room ${net!.code} · ${who}`;
 }
 
 // --- starting a game ---------------------------------------------------------
 
+function startSolo() {
+  solo = true;
+  setSession(new HostSession(RAPIER, { local: localInputs, bots: new Bots() }), 'local');
+  show('menu', false);
+  useControls();
+}
+
 function startLocal() {
+  solo = false;
   setSession(new HostSession(RAPIER, { local: localInputs }), 'local');
   show('menu', false);
   useControls();
@@ -262,6 +273,7 @@ async function joinRoom() {
   renderLobby();
 }
 
+$('btnSolo').onclick = startSolo;
 $('btnLocal').onclick = startLocal;
 $('btnCreate').onclick = createRoom;
 $('btnJoin').onclick = joinRoom;
@@ -313,6 +325,9 @@ function updateHud(s: Snapshot, dt: number) {
     c.classList.toggle('warn', s.ch.warn);
     c.textContent = s.ch.warn ? 'Uh oh… the monster feels funny…' : CHAOS_LABEL[s.ch.name];
   }
+  const hint = host?.hint ?? '';
+  show('hint', !!hint);
+  $('hint').textContent = hint;
   show('power', s.h[4] > 0);
   $('powerFill').style.width = `${s.h[4] * 100}%`;
   if (finished) {

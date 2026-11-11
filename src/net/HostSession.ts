@@ -1,5 +1,6 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { emptyInputs, type GameEvent, type Inputs, type Role, type RoleInput, type Snapshot } from '../../shared/protocol.ts';
+import type { Bots } from '../game/Bots.ts';
 import { DT, Simulation } from '../game/Simulation.ts';
 import type { NetClient } from './NetClient.ts';
 
@@ -13,6 +14,8 @@ export interface HostOptions {
   /** Inputs read from this machine. Roles left out come from the network (or stay idle). */
   local: () => Partial<Inputs>;
   net?: NetClient;
+  /** Autopilot for the legs, head and special when nobody (local or remote) plays them: solo mode. */
+  bots?: Bots;
   chaos?: boolean;
 }
 
@@ -23,6 +26,8 @@ export class HostSession implements Session {
   sim: Simulation;
   /** Paused while the partner is missing (online only). */
   waiting = false;
+  /** Solo mode: what the autopilot wants the player to do right now. */
+  hint = '';
   private acc = 0;
   private sendAcc = 0;
   private remote: Inputs = emptyInputs();
@@ -63,12 +68,14 @@ export class HostSession implements Session {
       while (this.acc >= DT) {
         this.acc -= DT;
         const local = this.opts.local();
-        const r = this.remote, l = this.latch;
+        const r = this.remote, l = this.latch, bots = this.opts.bots;
+        bots?.step(this.sim);
+        this.hint = bots?.hint ?? '';
         this.sim.step({
-          legs: local.legs ?? { ...r.legs, jump: r.legs.jump || l.jump },
+          legs: local.legs ?? bots?.legs ?? { ...r.legs, jump: r.legs.jump || l.jump },
           arms: local.arms ?? { ...r.arms, grab: r.arms.grab || l.grab },
-          head: local.head ?? r.head,
-          special: local.special ?? { roar: r.special.roar || l.roar, stomp: r.special.stomp || l.stomp },
+          head: local.head ?? bots?.head ?? r.head,
+          special: local.special ?? bots?.special ?? { roar: r.special.roar || l.roar, stomp: r.special.stomp || l.stomp },
         });
         l.jump = l.grab = l.roar = l.stomp = false;
       }

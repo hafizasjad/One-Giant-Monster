@@ -11,6 +11,8 @@ Two to four players, one wobbly monster. Between you, you are its **legs**, **ar
 
 All four roles are always in play. With fewer than four players some people hold two (by default Legs + Special and Arms + Head); the host can change who plays what in the lobby.
 
+**Solo:** "Play solo" makes you the arms; an autopilot (`src/game/Bots.ts`) walks, looks, roars and stomps, stops wherever the arms have a job, and shows a hint saying what to do.
+
 ## Run
 
 ```bash
