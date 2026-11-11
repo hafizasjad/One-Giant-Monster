@@ -16,6 +16,8 @@ const FUMBLES = ['SPLAT!', 'Whoopsie!', 'Aaaaaah!', 'Gravity wins!'];
 export interface SimOptions {
   chaos?: boolean;
   seed?: number;
+  /** The course to play. Defaults to the first level. */
+  level?: LevelDef;
 }
 
 /**
@@ -33,9 +35,10 @@ export class Simulation {
 
   time = 0;
   playTime = 0;
-  leverOn = false;
-  plateDown = false;
-  targetHit = false;
+  /** One flag per lever / pressure plate / target of the level. */
+  levers: boolean[];
+  plates: boolean[];
+  targets: boolean[];
   stars = 0;
   starCount = 0;
   fumbles = 0;
@@ -45,17 +48,17 @@ export class Simulation {
 
   private events: GameEvent[] = [];
   private entityOf = new Map<number, number>(); // collider handle -> entity index
-  private doorY: number;
-  private bridgeZ: number;
-  private drawAngle = Math.PI / 2;
+  private doorY: number[];
+  private bridgeZ: number[];
+  private drawAngle: number[];
   private hitCooldown = 0;
-  private boulderTimer = 1;
-  private boulderNext = 0;
+  private boulderTimer: number[];
+  private boulderNext: number[];
   private farTimers = new Map<number, number>();
   private include: (c: Collider) => boolean;
 
   constructor(private R: typeof RAPIER, opts: SimOptions = {}) {
-    this.level = buildLevel();
+    this.level = opts.level ?? buildLevel();
     this.world = new R.World({ x: 0, y: -GRAVITY, z: 0 });
     this.world.timestep = DT;
 
@@ -75,14 +78,21 @@ export class Simulation {
       this.entityOf.set(col.handle, i);
       this.bodies.push(body);
     });
-    for (const id of this.level.boulders.ids) this.bodies[id].setEnabled(false);
+    for (const sp of this.level.boulders) for (const id of sp.ids) this.bodies[id].setEnabled(false);
 
-    this.doorY = this.level.lever.closedY;
-    this.bridgeZ = this.level.plate.zIn;
+    const L = this.level;
+    this.levers = L.levers.map(() => false);
+    this.plates = L.plates.map(() => false);
+    this.targets = L.targets.map(() => false);
+    this.doorY = L.levers.map((l) => l.closedY);
+    this.bridgeZ = L.plates.map((pl) => pl.zIn);
+    this.drawAngle = L.targets.map(() => Math.PI / 2);
+    this.boulderTimer = L.boulders.map(() => 1);
+    this.boulderNext = L.boulders.map(() => 0);
     this.monster = new Monster(R, this.world, this.level.spawn);
     this.arms = new Arms(R, this.world, this.monster);
     this.chaos = new Chaos(opts.seed ?? 12345, opts.chaos ?? true);
-    this.placeDrawbridge();
+    L.targets.forEach((_, i) => this.placeDrawbridge(i));
 
     const handHandle = this.arms.collider.handle;
     this.include = (c) => {
@@ -106,10 +116,17 @@ export class Simulation {
         return best;
       },
       bodyOf: (e) => this.bodies[e],
-      leverDistance: (p) => dist(p, this.level.lever.pos),
-      toggleLever: () => {
-        this.leverOn = !this.leverOn;
-        this.emit('lever', toP(this.level.lever.pos), this.leverOn ? 'CLUNK!' : 'clonk.');
+      leverNear: (p, range) => {
+        let best = -1, bestD = range;
+        L.levers.forEach((l, i) => {
+          const d = dist(p, l.pos);
+          if (d < bestD) { bestD = d; best = i; }
+        });
+        return best;
+      },
+      toggleLever: (i) => {
+        this.levers[i] = !this.levers[i];
+        this.emit('lever', toP(L.levers[i].pos), this.levers[i] ? 'CLUNK!' : 'clonk.');
       },
       emit: (k, p, txt) => this.emit(k, p, txt),
     };
@@ -153,28 +170,31 @@ export class Simulation {
   private moveMachines(dt: number) {
     const L = this.level;
 
-    // Door sinks into the floor when the lever is on.
-    const doorTarget = this.leverOn ? L.lever.openY : L.lever.closedY;
-    if (this.doorY !== doorTarget) {
-      this.doorY = approach(this.doorY, doorTarget, 4 * dt);
-      const dp = L.entities[L.lever.door].pos;
-      this.bodies[L.lever.door].setTranslation({ x: dp[0], y: this.doorY, z: dp[2] }, true);
-    }
+    // Doors sink into the floor when their lever is on.
+    L.levers.forEach((lv, i) => {
+      const target = this.levers[i] ? lv.openY : lv.closedY;
+      if (this.doorY[i] === target) return;
+      this.doorY[i] = approach(this.doorY[i], target, 4 * dt);
+      const dp = L.entities[lv.door].pos;
+      this.bodies[lv.door].setTranslation({ x: dp[0], y: this.doorY[i], z: dp[2] }, true);
+    });
 
-    // Bridge extends while something sits on the pressure plate.
-    const bridgeTarget = this.plateDown ? L.plate.zOut : L.plate.zIn;
-    if (this.bridgeZ !== bridgeTarget) {
-      this.bridgeZ = approach(this.bridgeZ, bridgeTarget, 4 * dt);
-      const bp = L.entities[L.plate.bridge].pos;
-      this.bodies[L.plate.bridge].setTranslation({ x: bp[0], y: bp[1], z: this.bridgeZ }, true);
-    }
+    // Bridges extend while something sits on their pressure plate.
+    L.plates.forEach((pl, i) => {
+      const target = this.plates[i] ? pl.zOut : pl.zIn;
+      if (this.bridgeZ[i] === target) return;
+      this.bridgeZ[i] = approach(this.bridgeZ[i], target, 4 * dt);
+      const bp = L.entities[pl.bridge].pos;
+      this.bodies[pl.bridge].setTranslation({ x: bp[0], y: bp[1], z: this.bridgeZ[i] }, true);
+    });
 
-    // Drawbridge falls once the target has been hit.
-    if (this.targetHit && this.drawAngle > 0) {
-      this.drawAngle = Math.max(0, this.drawAngle - 0.9 * dt);
-      if (this.drawAngle === 0) this.emit('land', toP(L.target.hinge), 'KA-THUNK!');
-      this.placeDrawbridge();
-    }
+    // Drawbridges fall once their target has been hit.
+    L.targets.forEach((tg, i) => {
+      if (!this.targets[i] || this.drawAngle[i] <= 0) return;
+      this.drawAngle[i] = Math.max(0, this.drawAngle[i] - 0.9 * dt);
+      if (this.drawAngle[i] === 0) this.emit('land', toP(tg.hinge), 'KA-THUNK!');
+      this.placeDrawbridge(i);
+    });
 
     for (const h of L.hammers) {
       const p = this.hammerPos(h, this.time);
@@ -187,8 +207,8 @@ export class Simulation {
     return { x: h.pivot[0] + Math.sin(a) * h.len, y: h.pivot[1] - Math.cos(a) * h.len, z: h.pivot[2] };
   }
 
-  private placeDrawbridge() {
-    const t = this.level.target, a = this.drawAngle;
+  private placeDrawbridge(i: number) {
+    const t = this.level.targets[i], a = this.drawAngle[i];
     const pos = { x: t.hinge[0], y: t.hinge[1] + Math.sin(a) * t.halfLen, z: t.hinge[2] + Math.cos(a) * t.halfLen };
     const rot = { x: Math.sin(-a / 2), y: 0, z: 0, w: Math.cos(-a / 2) };
     const b = this.bodies[t.bridge];
@@ -201,36 +221,39 @@ export class Simulation {
   private afterStep(dt: number) {
     const L = this.level, m = this.monster;
 
-    // Pressure plate
-    let down = within(m.pos.x, m.feetY, m.pos.z, L.plate);
-    // Target, falling objects and stray balls
+    // Pressure plates, targets, falling objects and stray balls
+    const down = L.plates.map((pl) => within(m.pos.x, m.feetY, m.pos.z, pl));
     L.entities.forEach((e, i) => {
-      if (e.body !== 'dynamic' || e.tag === 'boulder') {
-        if (e.tag === 'boulder' && this.bodies[i].isEnabled()) {
-          const t = this.bodies[i].translation();
-          if (!down && within(t.x, t.y - e.half[0], t.z, L.plate)) down = true;
+      if (e.body !== 'dynamic') return;
+      const b = this.bodies[i];
+      if (!b.isEnabled()) return;
+      const t = b.translation();
+      const loose = i !== this.arms.held;
+      if (loose) L.plates.forEach((pl, n) => { if (within(t.x, t.y - e.half[1], t.z, pl)) down[n] = true; });
+      if (e.tag === 'boulder') return;
+      let stranded = false;
+      L.targets.forEach((tg, n) => {
+        if (this.targets[n] || !loose) return;
+        if (dist(t, tg.pos) < tg.r) {
+          this.targets[n] = true;
+          this.emit('target', toP(tg.pos), 'BULLSEYE!');
+        } else if (t.z < tg.strandedZ) {
+          stranded = true;
         }
-        return;
-      }
-      const b = this.bodies[i], t = b.translation();
-      if (i !== this.arms.held && within(t.x, t.y - e.half[1], t.z, L.plate)) down = true;
-      if (!this.targetHit && i !== this.arms.held && dist(t, L.target.pos) < L.target.r) {
-        this.targetHit = true;
-        this.emit('target', toP(L.target.pos), 'BULLSEYE!');
-      }
+      });
       if (t.y < L.killY) this.respawnEntity(i);
       if (e.tag === 'ball') {
-        // Balls stranded on the far side of the pit come back so the toss can't soft-lock.
-        const far = !this.targetHit && i !== this.arms.held && t.z < -79;
-        const ft = far ? (this.farTimers.get(i) ?? 0) + dt : 0;
+        // Balls stranded on the far side of a pit come back so the toss can't soft-lock.
+        const ft = stranded ? (this.farTimers.get(i) ?? 0) + dt : 0;
         this.farTimers.set(i, ft);
         if (ft > 2.5) this.respawnEntity(i);
       }
     });
-    if (down !== this.plateDown) {
-      this.plateDown = down;
-      this.emit('plate', toP(L.plate.pos), down ? 'click!' : undefined);
-    }
+    down.forEach((d, n) => {
+      if (d === this.plates[n]) return;
+      this.plates[n] = d;
+      this.emit('plate', toP(L.plates[n].pos), d ? 'click!' : undefined);
+    });
 
     // Hazards
     this.hitCooldown -= dt;
@@ -243,7 +266,7 @@ export class Simulation {
           break;
         }
       }
-      for (const id of L.boulders.ids) {
+      for (const id of L.boulders.flatMap((sp) => sp.ids)) {
         const b = this.bodies[id];
         if (!b.isEnabled()) continue;
         const v = b.linvel();
@@ -279,7 +302,7 @@ export class Simulation {
     }
     if (!this.finished && m.pos.z < L.finishZ && m.grounded) {
       this.finished = true;
-      this.finalScore = Math.max(0, 3000 - Math.floor(this.playTime) * 10) + this.starCount * 200 - this.fumbles * 100;
+      this.finalScore = Math.max(0, L.timeBonus - Math.floor(this.playTime) * 10) + this.starCount * 200 - this.fumbles * 100;
       this.finalScore = Math.max(0, this.finalScore);
       this.emit('finish', m.pos, 'FINISH!');
     }
@@ -299,19 +322,21 @@ export class Simulation {
   }
 
   private spawnBoulders(dt: number) {
-    const B = this.level.boulders, z = this.monster.pos.z;
-    if (this.finished || z > -41 || z < -70) return;
-    this.boulderTimer -= dt;
-    if (this.boulderTimer > 0) return;
-    this.boulderTimer = B.interval;
-    const b = this.bodies[B.ids[this.boulderNext]];
-    this.boulderNext = (this.boulderNext + 1) % B.ids.length;
-    const x = (this.chaos.rng() * 2 - 1) * 3.6;
-    b.setEnabled(true);
-    b.setTranslation({ x, y: B.y, z: B.z }, true);
-    b.setLinvel({ x: 0, y: 0, z: B.speed }, true);
-    b.setAngvel({ x: B.speed / 0.8, y: 0, z: 0 }, true);
-    this.emit('rumble', { x, y: B.y, z: B.z });
+    const z = this.monster.pos.z;
+    this.level.boulders.forEach((B, n) => {
+      if (this.finished || z > B.from || z < B.to) return;
+      this.boulderTimer[n] -= dt;
+      if (this.boulderTimer[n] > 0) return;
+      this.boulderTimer[n] = B.interval;
+      const b = this.bodies[B.ids[this.boulderNext[n]]];
+      this.boulderNext[n] = (this.boulderNext[n] + 1) % B.ids.length;
+      const x = (this.chaos.rng() * 2 - 1) * 3.6;
+      b.setEnabled(true);
+      b.setTranslation({ x, y: B.y, z: B.z }, true);
+      b.setLinvel({ x: 0, y: 0, z: B.speed }, true);
+      b.setAngvel({ x: B.speed / 0.8, y: 0, z: 0 }, true);
+      this.emit('rumble', { x, y: B.y, z: B.z });
+    });
   }
 
   private respawnEntity(i: number) {
@@ -346,7 +371,7 @@ export class Simulation {
       m: [r3(m.pos.x), r3(m.pos.y), r3(m.pos.z), r3(m.yaw), r3(m.speed), m.grounded ? 1 : 0, r3(m.vy)],
       h: [r3(a.pos.x), r3(a.pos.y), r3(a.pos.z), a.held, r3(a.charge)],
       b,
-      s: [this.leverOn ? 1 : 0, this.plateDown ? 1 : 0, this.targetHit ? 1 : 0],
+      s: [...this.levers, ...this.plates, ...this.targets].map((on) => (on ? 1 : 0)),
       stars: this.stars,
       sc: [r3(this.playTime), this.fumbles, this.finished ? 1 : 0, this.finalScore, this.starCount],
       ch: c ? { name: c.name, warn: c.warn, t: r3(c.t) } : null,

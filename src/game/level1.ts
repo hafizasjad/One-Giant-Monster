@@ -30,11 +30,19 @@ export interface LevelDef {
   movable: number[]; // entity indices that are not fixed, in snapshot order
   spawn: V3;
   checkpoints: { z: number; pos: V3 }[];
-  lever: { pos: V3; door: number; closedY: number; openY: number };
-  plate: { pos: V3; half: number; bridge: number; zIn: number; zOut: number };
-  target: { pos: V3; r: number; bridge: number; hinge: V3; halfLen: number };
+  /** Pull one to sink its door into the floor. */
+  levers: { pos: V3; door: number; closedY: number; openY: number }[];
+  /** While something sits on one, its bridge slides out. */
+  plates: { pos: V3; half: number; bridge: number; zIn: number; zOut: number }[];
+  /** Hit one with a thrown object to drop its drawbridge. Balls that end up beyond strandedZ before that come back. */
+  targets: { pos: V3; r: number; bridge: number; hinge: V3; halfLen: number; strandedZ: number }[];
   hammers: HammerDef[];
-  boulders: { ids: number[]; z: number; y: number; speed: number; interval: number };
+  /** Boulders roll from z towards the start while the monster is between `from` and `to`. */
+  boulders: { ids: number[]; z: number; y: number; speed: number; interval: number; from: number; to: number }[];
+  /** Free-standing floating signs. */
+  signs: { text: string; pos: V3; color?: string }[];
+  /** Score for finishing instantly; 10 points are lost per second. */
+  timeBonus: number;
   stars: V3[];
   finishZ: number;
   killY: number;
@@ -111,11 +119,13 @@ export function buildLevel(): LevelDef {
       { z: -43, pos: [0, MONSTER_Y, -44.5] },
       { z: -67, pos: [0, MONSTER_Y, -68.5] },
     ],
-    lever: { pos: [3.2, 3.2, -19.3], door, closedY: 2.2, openY: -2.45 }, // sinks into the floor so it never blocks the camera
-    plate: { pos: [-3, 0, -30], half: 1.3, bridge, zIn: -31.4, zOut: -36.5 },
-    target: { pos: [3.8, 3.2, -87.5], r: 1.6, bridge: drawbridge, hinge, halfLen: 4 },
+    levers: [{ pos: [3.2, 3.2, -19.3], door, closedY: 2.2, openY: -2.45 }], // doors sink into the floor so they never block the camera
+    plates: [{ pos: [-3, 0, -30], half: 1.3, bridge, zIn: -31.4, zOut: -36.5 }],
+    targets: [{ pos: [3.8, 3.2, -87.5], r: 1.6, bridge: drawbridge, hinge, halfLen: 4, strandedZ: -79 }],
     hammers,
-    boulders: { ids: boulderIds, z: -65, y: 1.2, speed: 8, interval: 3.2 },
+    boulders: [{ ids: boulderIds, z: -65, y: 1.2, speed: 8, interval: 3.2, from: -41, to: -70 }],
+    signs: [{ text: 'THROW A BALL', pos: [-3.6, 2.4, -74.5], color: '#7c5cff' }],
+    timeBonus: 3000,
     stars: [
       [0, 1.5, -4], [-3, 4.3, -13], [3, 1.5, -16], [0, 1.5, -25],
       [0, 2.6, -40.5], [-4, 1.5, -52.5], [4, 4.3, -63.5], [0, 1.5, -82],

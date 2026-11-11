@@ -1,5 +1,6 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { emptyInputs, type ArmsInput, type GameEvent, type Inputs, type LegsInput, type Role, type Snapshot } from '../../shared/protocol.ts';
+import type { LevelDef } from '../game/level1.ts';
 import { DT, Simulation } from '../game/Simulation.ts';
 import type { NetClient } from './NetClient.ts';
 
@@ -14,6 +15,8 @@ export interface HostOptions {
   local: () => Partial<Inputs>;
   net?: NetClient;
   chaos?: boolean;
+  /** Builds the course to play (a fresh copy per run). Defaults to the first level. */
+  level?: () => LevelDef;
 }
 
 const SEND_INTERVAL = 1 / 20;
@@ -37,7 +40,7 @@ export class HostSession implements Session {
   }
 
   private makeSim() {
-    return new Simulation(this.R, { chaos: this.opts.chaos ?? true, seed: (Math.random() * 1e9) | 0 });
+    return new Simulation(this.R, { chaos: this.opts.chaos ?? true, seed: (Math.random() * 1e9) | 0, level: this.opts.level?.() });
   }
 
   /** Called when the guest's input arrives. Quick taps are latched so none get lost between steps. */

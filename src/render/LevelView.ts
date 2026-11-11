@@ -58,13 +58,13 @@ const std = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) =>
 export class LevelView {
   group = new THREE.Group();
   private meshes: THREE.Mesh[] = [];
-  private lever = new THREE.Group();
-  private plate: THREE.Mesh;
-  private target = new THREE.Group();
+  private levers: THREE.Group[] = [];
+  private leverAngles: number[] = [];
+  private plates: THREE.Mesh[] = [];
+  private targets: THREE.Group[] = [];
   private stars: THREE.Mesh[] = [];
   private hammerArms: THREE.Mesh[] = [];
   private flags: THREE.Mesh[] = [];
-  private leverAngle = -0.8;
 
   constructor(private level: LevelDef) {
     level.entities.forEach((e) => {
@@ -75,42 +75,58 @@ export class LevelView {
     });
     const L = level;
 
-    // Lever on the wall
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.3), std(0x2f2a4a));
-    base.position.set(L.lever.pos[0], L.lever.pos[1], L.lever.pos[2] - 0.2);
-    this.lever.position.set(L.lever.pos[0], L.lever.pos[1], L.lever.pos[2] - 0.1);
-    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 10), std(0xdddddd, { metalness: 0.4 }));
-    stick.rotation.x = Math.PI / 2;
-    stick.position.z = 0.45;
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), std(0xffd23f, { emissive: 0x664400 }));
-    knob.position.z = 0.9;
-    this.lever.add(stick, knob);
-    const pull = sign('PULL ME!');
-    pull.position.set(L.lever.pos[0], L.lever.pos[1] + 1.7, L.lever.pos[2] + 0.3);
-    this.group.add(base, this.lever, pull);
+    // Levers on the wall
+    for (const lv of L.levers) {
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.3), std(0x2f2a4a));
+      base.position.set(lv.pos[0], lv.pos[1], lv.pos[2] - 0.2);
+      const lever = new THREE.Group();
+      lever.position.set(lv.pos[0], lv.pos[1], lv.pos[2] - 0.1);
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 10), std(0xdddddd, { metalness: 0.4 }));
+      stick.rotation.x = Math.PI / 2;
+      stick.position.z = 0.45;
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), std(0xffd23f, { emissive: 0x664400 }));
+      knob.position.z = 0.9;
+      lever.add(stick, knob);
+      const pull = sign('PULL ME!');
+      pull.position.set(lv.pos[0], lv.pos[1] + 1.7, lv.pos[2] + 0.3);
+      this.levers.push(lever);
+      this.leverAngles.push(-0.8);
+      this.group.add(base, lever, pull);
+    }
 
-    // Pressure plate
-    this.plate = new THREE.Mesh(new THREE.BoxGeometry(L.plate.half * 2, 0.16, L.plate.half * 2), std(0xff4f5e, { emissive: 0x330000 }));
-    this.plate.position.set(L.plate.pos[0], 0.08, L.plate.pos[2]);
-    const put = sign('BOX GOES HERE', '#2bb3c0');
-    put.position.set(L.plate.pos[0], 2.6, L.plate.pos[2]);
-    this.group.add(this.plate, put);
+    // Pressure plates
+    for (const pl of L.plates) {
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(pl.half * 2, 0.16, pl.half * 2), std(0xff4f5e, { emissive: 0x330000 }));
+      plate.position.set(pl.pos[0], pl.pos[1] + 0.08, pl.pos[2]);
+      const put = sign('BOX GOES HERE', '#2bb3c0');
+      put.position.set(pl.pos[0], pl.pos[1] + 2.6, pl.pos[2]);
+      this.plates.push(plate);
+      this.group.add(plate, put);
+    }
 
-    // Target
-    this.target.position.set(L.target.pos[0], L.target.pos[1], L.target.pos[2]);
-    [[1.45, 0xff3b4e], [1.0, 0xffffff], [0.55, 0xff3b4e]].forEach(([r, c], i) => {
-      const ring = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.12, 32), std(c));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.z = i * 0.05;
-      this.target.add(ring);
-    });
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, L.target.pos[1], 0.3), std(0x7a5a3a));
-    post.position.set(L.target.pos[0], L.target.pos[1] / 2, L.target.pos[2] - 0.25);
-    const hit = sign('HIT ME!');
-    hit.position.set(L.target.pos[0], L.target.pos[1] + 2.3, L.target.pos[2]);
-    const tossHint = sign('THROW A BALL', '#7c5cff');
-    tossHint.position.set(-3.6, 2.4, -74.5);
-    this.group.add(this.target, post, hit, tossHint);
+    // Targets
+    for (const tg of L.targets) {
+      const target = new THREE.Group();
+      target.position.set(tg.pos[0], tg.pos[1], tg.pos[2]);
+      [[1.45, 0xff3b4e], [1.0, 0xffffff], [0.55, 0xff3b4e]].forEach(([r, c], i) => {
+        const ring = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.12, 32), std(c));
+        ring.rotation.x = Math.PI / 2;
+        ring.position.z = i * 0.05;
+        target.add(ring);
+      });
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, tg.pos[1], 0.3), std(0x7a5a3a));
+      post.position.set(tg.pos[0], tg.pos[1] / 2, tg.pos[2] - 0.25);
+      const hit = sign('HIT ME!');
+      hit.position.set(tg.pos[0], tg.pos[1] + 2.3, tg.pos[2]);
+      this.targets.push(target);
+      this.group.add(target, post, hit);
+    }
+
+    for (const sg of L.signs) {
+      const sp = sign(sg.text, sg.color);
+      sp.position.set(sg.pos[0], sg.pos[1], sg.pos[2]);
+      this.group.add(sp);
+    }
 
     // Stars
     const sg = starGeometry();
@@ -137,12 +153,14 @@ export class LevelView {
       this.hammerArms.push(arm);
       this.group.add(arm);
     }
-    // Boulder chute
-    const chute = new THREE.Mesh(new THREE.BoxGeometry(10, 0.5, 0.5), std(0x6d5a4a));
-    chute.position.set(0, 3.2, L.boulders.z - 0.8);
-    const danger = sign('ROCKS!', '#e63946');
-    danger.position.set(0, 4.3, L.boulders.z - 0.8);
-    this.group.add(chute, danger);
+    // Boulder chutes
+    for (const B of L.boulders) {
+      const chute = new THREE.Mesh(new THREE.BoxGeometry(10, 0.5, 0.5), std(0x6d5a4a));
+      chute.position.set(0, B.y + 2, B.z - 0.8);
+      const danger = sign('ROCKS!', '#e63946');
+      danger.position.set(0, B.y + 3.1, B.z - 0.8);
+      this.group.add(chute, danger);
+    }
 
     // Checkpoint flags
     for (const cp of L.checkpoints) {
@@ -186,10 +204,20 @@ export class LevelView {
         cloud.add(puff);
       }
       const side = i % 2 ? 1 : -1;
-      cloud.position.set(side * (15 + rnd() * 26), -7 - rnd() * 10, 10 - rnd() * 125);
+      cloud.position.set(side * (15 + rnd() * 26), -7 - rnd() * 10, 10 - rnd() * (30 - L.finishZ));
       cloud.scale.setScalar(0.8 + rnd() * 1.1);
       this.group.add(cloud);
     }
+  }
+
+  /** Free the GPU memory of this level's meshes (shared textures are kept). */
+  dispose() {
+    this.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.geometry) return;
+      m.geometry.dispose();
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) mat.dispose();
+    });
   }
 
   private entityMesh(e: EntityDef) {
@@ -227,16 +255,25 @@ export class LevelView {
       m.quaternion.set(s.b[o + 3], s.b[o + 4], s.b[o + 5], s.b[o + 6]).normalize();
     });
 
-    this.leverAngle += ((s.s[0] ? 0.8 : -0.8) - this.leverAngle) * Math.min(1, dt * 14);
-    this.lever.rotation.x = this.leverAngle;
+    const nL = L.levers.length, nP = L.plates.length;
+    this.levers.forEach((lever, i) => {
+      this.leverAngles[i] += ((s.s[i] ? 0.8 : -0.8) - this.leverAngles[i]) * Math.min(1, dt * 14);
+      lever.rotation.x = this.leverAngles[i];
+    });
 
-    const pm = this.plate.material as THREE.MeshStandardMaterial;
-    pm.color.setHex(s.s[1] ? 0x58e06a : 0xff4f5e);
-    pm.emissive.setHex(s.s[1] ? 0x0a4a12 : 0x330000);
-    this.plate.position.y = s.s[1] ? 0.02 : 0.08;
+    this.plates.forEach((plate, i) => {
+      const on = s.s[nL + i];
+      const pm = plate.material as THREE.MeshStandardMaterial;
+      pm.color.setHex(on ? 0x58e06a : 0xff4f5e);
+      pm.emissive.setHex(on ? 0x0a4a12 : 0x330000);
+      plate.position.y = L.plates[i].pos[1] + (on ? 0.02 : 0.08);
+    });
 
-    this.target.rotation.z += dt * (s.s[2] ? 10 : 0);
-    this.target.scale.setScalar(s.s[2] ? 0.8 : 1 + Math.sin(time * 4) * 0.05);
+    this.targets.forEach((target, i) => {
+      const hit = s.s[nL + nP + i];
+      target.rotation.z += dt * (hit ? 10 : 0);
+      target.scale.setScalar(hit ? 0.8 : 1 + Math.sin(time * 4) * 0.05);
+    });
 
     this.stars.forEach((st, i) => {
       st.visible = !(s.stars & (1 << i));

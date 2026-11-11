@@ -62,6 +62,7 @@ Notes:
 ## How it fits together
 
 - `src/game/` is the simulation: no DOM or rendering, driven by one input per role (`shared/protocol.ts`). Adding a body part means adding a role there.
+- `src/game/levels.ts` lists the levels. Each one is a data builder like `level1.ts` and can have any number of levers, pressure plates, targets, hammers and boulder chutes. Best scores are saved per level in the browser.
 - `src/input/` merges keyboard, controllers and touch into those per-role inputs.
 - `src/render/` draws snapshots of the simulation; `src/net/` runs it on the room creator's machine and streams snapshots to the other player.
 - `server/index.ts` only manages rooms and relays messages.

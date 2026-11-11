@@ -2,7 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { emptyInputs, otherRole, type PeerMsg, type Role, type Snapshot } from '../shared/protocol.ts';
 import { Sfx } from './audio/Sfx.ts';
 import { CHAOS_LABEL } from './game/Chaos.ts';
-import { buildLevel } from './game/level1.ts';
+import { loadBest, saveBest } from './best.ts';
+import { LEVELS } from './game/levels.ts';
 import { Input } from './input/Input.ts';
 import { GuestSession } from './net/GuestSession.ts';
 import { HostSession, type Session } from './net/HostSession.ts';
@@ -13,7 +14,10 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const show = (id: string, on = true) => $(id).classList.toggle('hidden', !on);
 
 await RAPIER.init();
-const level = buildLevel();
+/** The level being played (and drawn). */
+let levelIndex = 0;
+let level = LEVELS[0].build();
+const STAR_TOTALS = LEVELS.map((l) => l.build().stars.length);
 const sfx = new Sfx();
 const kb = new Input($('touch'));
 const view = new GameView($('game'), $('overlay'), level, sfx);
@@ -25,6 +29,8 @@ let host: HostSession | null = null;
 let guest: GuestSession | null = null;
 let net: NetClient | null = null;
 let hostRole: Role = 'legs';
+/** Online: the level the host has picked in the lobby. */
+let lobbyLevel = 0;
 let peerHere = false;
 let inGame = false;
 let lastSnap: Snapshot | null = null;
@@ -53,12 +59,23 @@ function setSession(s: Session, m: Mode) {
   if (!inGame) kb.touch.show(null);
 }
 
+/** Switch the course that is played and drawn. Call right before starting a session. */
+function useLevel(i: number) {
+  if (i === levelIndex) return;
+  levelIndex = i;
+  level = LEVELS[i].build();
+  view.setLevel(level);
+  lastSnap = null; // snapshots of the old level don't fit the new one
+}
+const buildCurrent = () => LEVELS[levelIndex].build();
+
 function toMenu(message = '') {
   net?.close();
   net = null;
   peerHere = false;
-  setSession(new HostSession(RAPIER, { local: emptyInputs, chaos: false }), 'menu');
+  setSession(new HostSession(RAPIER, { local: emptyInputs, chaos: false, level: buildCurrent }), 'menu');
   show('lobby', false);
+  show('levels', false);
   show('menu', true);
   $('menuError').textContent = message;
 }
@@ -90,30 +107,53 @@ function useControls(c: Controls = controls) {
 }
 kb.onDevice = () => { if (inGame) useControls(); };
 
-function startLocal() {
-  setSession(new HostSession(RAPIER, { local: () => ({ legs: kb.legs('shared'), arms: kb.arms('shared') }) }), 'local');
-  show('menu', false);
+function startLocal(levelIdx: number) {
+  useLevel(levelIdx);
+  setSession(new HostSession(RAPIER, { level: buildCurrent, local: () => ({ legs: kb.legs('shared'), arms: kb.arms('shared') }) }), 'local');
+  show('levels', false);
   $('whoText').textContent = 'Solo';
   useControls('shared');
 }
 
 function startHosting() {
   const role = hostRole;
+  useLevel(lobbyLevel);
   setSession(new HostSession(RAPIER, {
     net: net!,
+    level: buildCurrent,
     local: () => (role === 'legs' ? { legs: kb.legs('solo') } : { arms: kb.arms('solo') }),
   }), 'host');
   show('lobby', false);
   $('whoText').textContent = `Room ${net!.code}`;
   useControls(role);
-  net!.send({ k: 'start', hostRole: role });
+  net!.send({ k: 'start', hostRole: role, level: levelIndex });
 }
 
-function startGuest(role: Role) {
+function startGuest(role: Role, levelIdx: number) {
+  useLevel(levelIdx);
   setSession(new GuestSession(net!, role, () => (role === 'legs' ? kb.legs('solo') : kb.arms('solo'))), 'guest');
   show('lobby', false);
   $('whoText').textContent = `Room ${net!.code}`;
   useControls(role);
+}
+
+// --- level select (solo) -------------------------------------------------------
+
+function showLevels() {
+  show('menu', false);
+  show('levels', true);
+  $('levelList').replaceChildren(...LEVELS.map((info, i) => {
+    const b = document.createElement('button');
+    if (i > 0) b.className = 'alt';
+    const best = loadBest(info.id);
+    const title = document.createElement('span');
+    title.textContent = `${i + 1}. ${info.name}`;
+    const record = document.createElement('small');
+    record.textContent = best ? `Best ${best.score} · ★ ${best.stars}/${STAR_TOTALS[i]} · ${fmtTime(best.time)}` : 'Not played yet';
+    b.append(title, record);
+    b.onclick = () => startLocal(i);
+    return b;
+  }));
 }
 
 // --- lobby -----------------------------------------------------------------
@@ -127,6 +167,10 @@ function renderLobby(isHost: boolean) {
   $('roleLegs').className = hostRole === 'legs' ? 'on' : 'alt';
   $('roleArms').className = hostRole === 'arms' ? 'on' : 'alt';
   ($('btnStart') as HTMLButtonElement).disabled = !peerHere;
+  const pick = $('lobbyLevel') as HTMLButtonElement;
+  pick.textContent = `Level: ${LEVELS[lobbyLevel].name}`;
+  // Only the host chooses, and only when there is something to choose between.
+  pick.classList.toggle('fixed', !isHost || LEVELS.length < 2);
   if (isHost) {
     $('lobbyTitle').textContent = 'Share this room code';
     $('lobbyStatus').textContent = peerHere ? 'Your partner is here! Pick who does what.' : 'Waiting for your partner to join…';
@@ -136,6 +180,8 @@ function renderLobby(isHost: boolean) {
   }
 }
 
+const sendLobby = () => net?.send({ k: 'lobby', hostRole, level: lobbyLevel });
+
 async function createRoom() {
   try {
     net = await NetClient.connect();
@@ -144,14 +190,15 @@ async function createRoom() {
     return toMenu((e as Error).message);
   }
   peerHere = false;
+  lobbyLevel = levelIndex;
   net.onPeerJoined = () => {
     peerHere = true;
     if (mode === 'host' && host) {
       host.waiting = false;
       show('notice', false);
-      net!.send({ k: 'start', hostRole });
+      net!.send({ k: 'start', hostRole, level: levelIndex });
     } else {
-      net!.send({ k: 'lobby', hostRole });
+      sendLobby();
       renderLobby(true);
     }
   };
@@ -182,8 +229,8 @@ async function joinRoom() {
     return toMenu((e as Error).message);
   }
   net.onPeerMsg = (m: PeerMsg) => {
-    if (m.k === 'lobby') { hostRole = m.hostRole; renderLobby(false); }
-    else if (m.k === 'start') { hostRole = m.hostRole; startGuest(otherRole(m.hostRole)); }
+    if (m.k === 'lobby') { hostRole = m.hostRole; lobbyLevel = m.level; renderLobby(false); }
+    else if (m.k === 'start') { hostRole = m.hostRole; startGuest(otherRole(m.hostRole), m.level); }
     else if (m.k === 'snap') guest?.receive(m.s);
     else if (m.k === 'restart') { guest?.clear(); view.reset(); show('results', false); resultsTimer = 0; }
   };
@@ -192,12 +239,18 @@ async function joinRoom() {
   renderLobby(false);
 }
 
-$('btnSolo').onclick = startLocal;
+$('btnSolo').onclick = showLevels;
+$('btnLevelsBack').onclick = () => toMenu();
+$('lobbyLevel').onclick = () => {
+  lobbyLevel = (lobbyLevel + 1) % LEVELS.length;
+  sendLobby();
+  renderLobby(true);
+};
 $('btnCreate').onclick = createRoom;
 $('btnJoin').onclick = joinRoom;
 $('joinCode').onkeydown = (e) => { if (e.key === 'Enter') void joinRoom(); };
-$('roleLegs').onclick = () => { hostRole = 'legs'; net?.send({ k: 'lobby', hostRole }); renderLobby(true); };
-$('roleArms').onclick = () => { hostRole = 'arms'; net?.send({ k: 'lobby', hostRole }); renderLobby(true); };
+$('roleLegs').onclick = () => { hostRole = 'legs'; sendLobby(); renderLobby(true); };
+$('roleArms').onclick = () => { hostRole = 'arms'; sendLobby(); renderLobby(true); };
 $('btnStart').onclick = startHosting;
 $('btnLeave').onclick = () => toMenu();
 $('btnMenu').onclick = () => toMenu();
@@ -242,6 +295,10 @@ function updateHud(s: Snapshot, dt: number) {
       $('resTime').textContent = fmtTime(time);
       $('resStars').textContent = `${stars} / ${level.stars.length}`;
       $('resFumbles').textContent = String(fumbles);
+      $('resLevel').textContent = LEVELS[levelIndex].name;
+      const id = LEVELS[levelIndex].id;
+      const isBest = saveBest(id, { score: final, stars, time });
+      $('resBest').textContent = isBest ? 'New best!' : `Your best: ${loadBest(id)?.score ?? final}`;
       show('btnAgain', mode !== 'guest');
       show('resWait', mode === 'guest');
       show('results', true);
@@ -253,6 +310,8 @@ function updateHud(s: Snapshot, dt: number) {
 if (import.meta.env.DEV) (window as any).__game = {
   get host() { return host; },
   get snap() { return lastSnap; },
+  levels: LEVELS,
+  startLocal,
   /** Run n frames right now (the Browser pane stops animation frames while hidden). */
   frames(n: number) { for (let i = 0; i < n; i++) { prev = performance.now() - 50; tick(performance.now(), true); } },
 };

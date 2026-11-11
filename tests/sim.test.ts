@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { emptyInputs, type Inputs } from '../shared/protocol.ts';
-import { MONSTER_Y } from '../src/game/level1.ts';
+import { buildLevel, MONSTER_Y } from '../src/game/level1.ts';
+import { LEVELS } from '../src/game/levels.ts';
 import { Simulation } from '../src/game/Simulation.ts';
 
 beforeAll(async () => {
@@ -75,12 +76,12 @@ describe('arms', () => {
 
   it('pulls the lever to open the door', () => {
     const sim = make();
-    const doorBody = sim.bodies[sim.level.lever.door];
+    const doorBody = sim.bodies[sim.level.levers[0].door];
     sim.monster.teleport([3.2, MONSTER_Y, -17.4]);
     run(sim, 20);
     run(sim, 60, (i) => { i.arms.ay = 1; });
     tapGrab(sim);
-    expect(sim.leverOn).toBe(true);
+    expect(sim.levers[0]).toBe(true);
     run(sim, 120);
     expect(doorBody.translation().y).toBeLessThan(-2);
 
@@ -95,11 +96,11 @@ describe('arms', () => {
 describe('course', () => {
   it('extends the bridge while a crate is on the plate', () => {
     const sim = make();
-    const { plate } = sim.level;
+    const plate = sim.level.plates[0];
     const crate = sim.level.entities.findIndex((e) => e.tag === 'crate' && e.pos[2] === -27);
     sim.bodies[crate].setTranslation({ x: plate.pos[0], y: 0.7, z: plate.pos[2] }, true);
     run(sim, 150);
-    expect(sim.plateDown).toBe(true);
+    expect(sim.plates[0]).toBe(true);
     expect(sim.bodies[plate.bridge].translation().z).toBeCloseTo(plate.zOut, 1);
 
     // cross: walk over the bridge and jump the remaining gap
@@ -112,11 +113,11 @@ describe('course', () => {
 
   it('a ball on the target drops the drawbridge and the monster can finish', () => {
     const sim = make();
-    const { target } = sim.level;
+    const target = sim.level.targets[0];
     const ball = sim.level.entities.findIndex((e) => e.tag === 'ball');
     sim.bodies[ball].setTranslation({ x: target.pos[0], y: target.pos[1], z: target.pos[2] }, true);
     run(sim, 200);
-    expect(sim.targetHit).toBe(true);
+    expect(sim.targets[0]).toBe(true);
 
     sim.monster.teleport([0, MONSTER_Y, -76]);
     run(sim, 20);
@@ -142,5 +143,41 @@ describe('course', () => {
     const snap = sim.snapshot();
     expect(JSON.parse(JSON.stringify(snap))).toEqual(snap);
     expect(snap.b.length).toBe(sim.level.movable.length * 7);
+  });
+});
+
+describe('levels', () => {
+  it('every level in the list builds, runs and snapshots', () => {
+    expect(LEVELS.length).toBeGreaterThan(0);
+    expect(new Set(LEVELS.map((l) => l.id)).size).toBe(LEVELS.length);
+    for (const info of LEVELS) {
+      const level = info.build();
+      const sim = new Simulation(RAPIER, { chaos: false, level });
+      run(sim, 30);
+      const snap = sim.snapshot();
+      expect(sim.monster.grounded, info.name).toBe(true);
+      expect(snap.s.length).toBe(level.levers.length + level.plates.length + level.targets.length);
+      expect(JSON.parse(JSON.stringify(snap))).toEqual(snap);
+      sim.dispose();
+    }
+  });
+
+  it('a level can have several levers, each with its own door', () => {
+    // Level 1 plus a second door right at the start, with its own lever.
+    const level = buildLevel();
+    const door2 = level.entities.push({ shape: 'box', half: [1.6, 2.2, 0.3], pos: [0, 2.2, -3], body: 'kinematic', color: 0xff5d73, tag: 'door' }) - 1;
+    level.movable.push(door2);
+    level.levers.push({ pos: [3.2, 3.2, -2.3], door: door2, closedY: 2.2, openY: -2.45 });
+
+    const sim = new Simulation(RAPIER, { chaos: false, level });
+    sim.monster.teleport([3.2, MONSTER_Y, -0.4]);
+    run(sim, 20);
+    run(sim, 60, (i) => { i.arms.ay = 1; });
+    tapGrab(sim);
+    expect(sim.levers).toEqual([false, true]);
+    run(sim, 120);
+    expect(sim.bodies[door2].translation().y).toBeLessThan(-2);
+    expect(sim.bodies[level.levers[0].door].translation().y).toBeGreaterThan(2); // the other door stays shut
+    expect(sim.snapshot().s).toEqual([0, 1, 0, 0]);
   });
 });

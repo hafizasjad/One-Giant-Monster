@@ -54,6 +54,15 @@ export class GameView {
     resize();
   }
 
+  /** Swap the course being drawn. */
+  setLevel(level: LevelDef) {
+    this.scene.remove(this.levelView.group);
+    this.levelView.dispose();
+    this.levelView = new LevelView(level);
+    this.scene.add(this.levelView.group);
+    this.reset();
+  }
+
   reset() {
     this.effects.clear();
     this.confetti = 0;

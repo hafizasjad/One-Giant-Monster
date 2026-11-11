@@ -40,7 +40,7 @@ export interface Snapshot {
   h: number[];
   /** movable entity transforms, 7 numbers each (pos + quaternion) */
   b: number[];
-  /** lever on, plate down, target hit */
+  /** one 0/1 per lever (on), then per pressure plate (down), then per target (hit), in level order */
   s: number[];
   /** collected stars bitmask */
   stars: number;
@@ -54,8 +54,8 @@ export interface Snapshot {
 
 // Messages between the two players (relayed verbatim by the server).
 export type PeerMsg =
-  | { k: 'lobby'; hostRole: Role }
-  | { k: 'start'; hostRole: Role }
+  | { k: 'lobby'; hostRole: Role; level: number }
+  | { k: 'start'; hostRole: Role; level: number }
   | { k: 'restart' }
   | { k: 'snap'; s: Snapshot }
   | { k: 'input'; role: Role; i: LegsInput | ArmsInput };

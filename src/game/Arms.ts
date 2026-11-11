@@ -11,8 +11,9 @@ export interface ArmsWorld {
   /** Nearest grabbable entity to a point, or -1. */
   nearestGrabbable(p: { x: number; y: number; z: number }, range: number): number;
   bodyOf(entity: number): RigidBody;
-  leverDistance(p: { x: number; y: number; z: number }): number;
-  toggleLever(): void;
+  /** Index of the nearest lever within range, or -1. */
+  leverNear(p: { x: number; y: number; z: number }, range: number): number;
+  toggleLever(lever: number): void;
   emit(k: string, p?: { x: number; y: number; z: number }, txt?: string): void;
 }
 
@@ -76,8 +77,9 @@ export class Arms {
       } else {
         // A lever in reach wins over loose things lying next to it.
         const e = w.nearestGrabbable(this.pos, GRAB_RANGE);
-        if (w.leverDistance(this.pos) < LEVER_RANGE) {
-          w.toggleLever();
+        const lever = w.leverNear(this.pos, LEVER_RANGE);
+        if (lever >= 0) {
+          w.toggleLever(lever);
         } else if (e >= 0) {
           this.held = e;
           this.charge = 0;
