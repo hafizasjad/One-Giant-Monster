@@ -29,9 +29,14 @@ Then open http://localhost:3001 (set `PORT` to change it).
 
 `M` mutes sound.
 
+**Controller** (standard layout): Legs use the left stick or d-pad and `A` to jump. Arms use the left stick for the hand, `LB` / `RB` (or right stick) to reach, `A` to grab / drop / pull, hold `X` or `RT` then release to throw. Online, any controller drives your role. On one device, controller 1 is the legs and controller 2 is the arms; with a single controller the arms stay on the keyboard.
+
+**Touch**: on phones and tablets a joystick and buttons appear on screen for your role (both roles when playing on one device, which wants a tablet). Add `?touch=1` to the address to try them with a mouse.
+
 ## How it fits together
 
 - `src/game/` is the simulation: no DOM or rendering, driven by one input per role (`shared/protocol.ts`). Adding a body part means adding a role there.
+- `src/input/` merges keyboard, controllers and touch into those per-role inputs.
 - `src/render/` draws snapshots of the simulation; `src/net/` runs it on the room creator's machine and streams snapshots to the other player.
 - `server/index.ts` only manages rooms and relays messages.
 - `npm test` runs the headless simulation tests.

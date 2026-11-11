@@ -3,7 +3,7 @@ import type { ArmsInput, LegsInput } from '../../shared/protocol.ts';
 /** 'shared' = two players on one keyboard, 'solo' = one player per keyboard (online). */
 export type Scheme = 'shared' | 'solo';
 
-const GAME_KEYS = new Set([
+export const GAME_KEYS = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter',
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyF', 'Comma', 'Period', 'ShiftRight',
 ]);

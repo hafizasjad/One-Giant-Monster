@@ -3,7 +3,7 @@ import { emptyInputs, otherRole, type PeerMsg, type Role, type Snapshot } from '
 import { Sfx } from './audio/Sfx.ts';
 import { CHAOS_LABEL } from './game/Chaos.ts';
 import { buildLevel } from './game/level1.ts';
-import { Keyboard } from './input/Keyboard.ts';
+import { Input } from './input/Input.ts';
 import { GuestSession } from './net/GuestSession.ts';
 import { HostSession, type Session } from './net/HostSession.ts';
 import { NetClient } from './net/NetClient.ts';
@@ -15,7 +15,7 @@ const show = (id: string, on = true) => $(id).classList.toggle('hidden', !on);
 await RAPIER.init();
 const level = buildLevel();
 const sfx = new Sfx();
-const kb = new Keyboard();
+const kb = new Input($('touch'));
 const view = new GameView($('game'), $('overlay'), level, sfx);
 
 type Mode = 'menu' | 'local' | 'host' | 'guest';
@@ -50,6 +50,7 @@ function setSession(s: Session, m: Mode) {
   show('results', false);
   show('notice', false);
   show('hud', inGame);
+  if (!inGame) kb.touch.show(null);
 }
 
 function toMenu(message = '') {
@@ -63,18 +64,37 @@ function toMenu(message = '') {
 }
 
 const K = (s: string) => `<kbd>${s}</kbd>`;
-const HELP = {
-  shared: `<span><b>LEGS</b> ${K('W')}${K('A')}${K('S')}${K('D')} move · ${K('Space')} jump</span>` +
-    `<span><b>ARMS</b> ${K('←')}${K('↑')}${K('↓')}${K('→')} hand · ${K(',')}${K('.')} reach · ${K('R-Shift')} grab/drop · hold ${K('Enter')} throw</span>`,
-  legs: `<span><b>YOU ARE THE LEGS</b> ${K('W')}${K('A')}${K('S')}${K('D')} or arrows to move · ${K('Space')} jump</span>`,
-  arms: `<span><b>YOU ARE THE ARMS</b> ${K('W')}${K('A')}${K('S')}${K('D')} or arrows move the hand · ${K('Q')}${K('E')} reach in/out · ${K('Space')} grab/drop/pull · hold ${K('F')} then release to throw</span>`,
+type Controls = 'shared' | Role;
+const PAD_LEGS = `left stick move · ${K('A')} jump`;
+const PAD_ARMS = `left stick hand · ${K('LB')}${K('RB')} reach · ${K('A')} grab/drop/pull · hold ${K('X')} throw`;
+const HELP: Record<'keyboard' | 'gamepad', Record<Controls, string>> = {
+  keyboard: {
+    shared: `<span><b>LEGS</b> ${K('W')}${K('A')}${K('S')}${K('D')} move · ${K('Space')} jump</span>` +
+      `<span><b>ARMS</b> ${K('←')}${K('↑')}${K('↓')}${K('→')} hand · ${K(',')}${K('.')} reach · ${K('R-Shift')} grab/drop · hold ${K('Enter')} throw</span>`,
+    legs: `<span><b>YOU ARE THE LEGS</b> ${K('W')}${K('A')}${K('S')}${K('D')} or arrows to move · ${K('Space')} jump</span>`,
+    arms: `<span><b>YOU ARE THE ARMS</b> ${K('W')}${K('A')}${K('S')}${K('D')} or arrows move the hand · ${K('Q')}${K('E')} reach in/out · ${K('Space')} grab/drop/pull · hold ${K('F')} then release to throw</span>`,
+  },
+  gamepad: {
+    shared: `<span><b>LEGS</b> controller 1: ${PAD_LEGS}</span><span><b>ARMS</b> controller 2 (or keyboard): ${PAD_ARMS}</span>`,
+    legs: `<span><b>YOU ARE THE LEGS</b> ${PAD_LEGS}</span>`,
+    arms: `<span><b>YOU ARE THE ARMS</b> ${PAD_ARMS}</span>`,
+  },
 };
+
+let controls: Controls = 'shared';
+/** Show the help and on-screen buttons for the roles played on this device. */
+function useControls(c: Controls = controls) {
+  controls = c;
+  kb.touch.show(c === 'shared' ? ['legs', 'arms'] : [c]);
+  if (kb.device !== 'touch') $('help').innerHTML = HELP[kb.device][c];
+}
+kb.onDevice = () => { if (inGame) useControls(); };
 
 function startLocal() {
   setSession(new HostSession(RAPIER, { local: () => ({ legs: kb.legs('shared'), arms: kb.arms('shared') }) }), 'local');
   show('menu', false);
-  $('whoText').textContent = 'Shared keyboard';
-  $('help').innerHTML = HELP.shared;
+  $('whoText').textContent = 'One device';
+  useControls('shared');
 }
 
 function startHosting() {
@@ -85,7 +105,7 @@ function startHosting() {
   }), 'host');
   show('lobby', false);
   $('whoText').textContent = `Room ${net!.code}`;
-  $('help').innerHTML = HELP[role];
+  useControls(role);
   net!.send({ k: 'start', hostRole: role });
 }
 
@@ -93,7 +113,7 @@ function startGuest(role: Role) {
   setSession(new GuestSession(net!, role, () => (role === 'legs' ? kb.legs('solo') : kb.arms('solo'))), 'guest');
   show('lobby', false);
   $('whoText').textContent = `Room ${net!.code}`;
-  $('help').innerHTML = HELP[role];
+  useControls(role);
 }
 
 // --- lobby -----------------------------------------------------------------

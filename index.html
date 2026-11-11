@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>One Giant Monster</title>
   <style>
     :root { --ink: #2a1b4d; --purple: #7c5cff; --pink: #ff4f8b; --yellow: #ffd23f; --paper: #fffaf0; }
@@ -22,10 +22,10 @@
     .popup.purple { color: #c9b8ff; }
     @keyframes pop { from { transform: translate(-50%, -50%) scale(.2) rotate(var(--tilt, 0deg)); } }
 
-    .screen { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
+    .screen { position: fixed; inset: 0; display: flex; overflow: auto; padding: 16px;
       background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, .25), rgba(42, 27, 77, .45)); }
     .card { background: var(--paper); border: 5px solid var(--ink); border-radius: 28px; padding: 28px 34px;
-      box-shadow: 0 10px 0 var(--ink); text-align: center; width: min(520px, 100%); }
+      box-shadow: 0 10px 0 var(--ink); text-align: center; width: min(520px, 100%); margin: auto; }
     h1 { margin: 0; font-size: clamp(38px, 8vw, 62px); line-height: .95; font-weight: 900; color: var(--purple);
       -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); transform: rotate(-2deg); }
     h1 span { color: var(--pink); display: block; }
@@ -68,6 +68,41 @@
       gap: 22px; max-width: calc(100vw - 28px); flex-wrap: wrap; justify-content: center; }
     #help b { color: var(--purple); }
     kbd { background: #fff; border: 2px solid var(--ink); border-radius: 6px; padding: 0 5px; font: inherit; font-size: 13px; }
+
+    /* On-screen controls for phones and tablets */
+    #game, #hud, #touch { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    #touch { position: fixed; inset: 0; pointer-events: none; }
+    #touch .pad { position: absolute; left: 0; right: 0; top: 32%; bottom: 0; }
+    #touch.both .pad:first-child { right: 50%; }
+    #touch.both .pad:last-child { left: 50%; }
+    #touch .zone { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; pointer-events: auto; touch-action: none; }
+    #touch .stick { position: absolute; left: calc(96px + env(safe-area-inset-left)); top: calc(100% - 96px - env(safe-area-inset-bottom));
+      width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; pointer-events: none;
+      background: rgba(255, 250, 240, .55); border: 4px solid var(--ink); opacity: .6; }
+    #touch .stick.live { opacity: 1; }
+    #touch .stick i { position: absolute; inset: 26px; border-radius: 50%; background: var(--purple); border: 4px solid var(--ink); }
+    #touch .btns { position: absolute; right: calc(16px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
+      display: grid; grid-template-columns: repeat(2, auto); gap: 10px; pointer-events: auto; }
+    #touch .btns.one { grid-template-columns: auto; }
+    #touch .tb { min-width: 86px; height: 68px; padding: 0 12px; display: grid; place-items: center; white-space: nowrap;
+      font-weight: 900; font-size: 18px; background: var(--yellow); border: 4px solid var(--ink); border-radius: 20px;
+      box-shadow: 0 5px 0 var(--ink); opacity: .92; touch-action: none; cursor: pointer; }
+    #touch .tb.small { height: 46px; font-size: 15px; background: #fff; }
+    #touch .tb.big { width: 112px; height: 112px; border-radius: 50%; font-size: 22px; }
+    #touch .tb.down { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); background: var(--pink); color: #fff; }
+    body.touch #help { display: none; }
+    body.touch #power { bottom: auto; top: 118px; }
+    #rotate { display: none; top: 30%; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+    @media (orientation: portrait) { body.touch #rotate { display: block; } }
+
+    @media (max-height: 560px) {
+      .card { padding: 14px 22px; width: min(620px, 100%); }
+      h1 { font-size: 34px; } h1 span { display: inline; }
+      h2 { font-size: 24px; } p { margin: 6px 0; font-size: 15px; }
+      .stack { gap: 8px; margin-top: 10px; } button { font-size: 16px; padding: 6px 16px; }
+      .code { font-size: 38px; } .score { font-size: 36px; } table { margin: 4px auto; font-size: 16px; }
+      .error { min-height: 0; }
+    }
     @media (prefers-reduced-motion: reduce) { .popup, #chaos.warn { animation: none; } }
   </style>
 </head>
@@ -82,14 +117,16 @@
     <div id="power" class="chip hidden"><span>THROW POWER</span><i><b id="powerFill"></b></i></div>
     <div id="notice" class="chip hidden"></div>
     <div id="help" class="chip"></div>
+    <div id="rotate" class="chip">Turn your phone sideways ↻</div>
   </div>
+  <div id="touch" class="hidden"></div>
 
   <div id="menu" class="screen">
     <div class="card">
       <h1>One Giant <span>Monster</span></h1>
       <p>Two players. One wobbly monster. One of you is the <b>legs</b>, the other is the <b>arms</b>. Good luck.</p>
       <div class="stack">
-        <button id="btnLocal">Play on one keyboard</button>
+        <button id="btnLocal">Play on one device</button>
         <button id="btnCreate" class="alt">Create online room</button>
         <div class="row">
           <input id="joinCode" maxlength="4" placeholder="CODE" aria-label="Room code" autocomplete="off" />
