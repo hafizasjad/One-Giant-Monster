@@ -23,17 +23,6 @@ const crateTex = canvasTexture(64, (g, s) => {
   g.lineWidth = 5; g.beginPath(); g.moveTo(8, 8); g.lineTo(s - 8, s - 8); g.stroke();
 });
 
-const crackTex = canvasTexture(128, (g, s) => {
-  g.fillStyle = '#ffffff'; g.fillRect(0, 0, s, s);
-  g.strokeStyle = '#6b5a45'; g.lineWidth = 4; g.lineJoin = 'round';
-  const lines = [[10, 0, 40, 38, 22, 70, 52, 128], [128, 20, 92, 46, 104, 84, 70, 100, 52, 128], [40, 38, 78, 30, 92, 46], [0, 96, 22, 70]];
-  for (const l of lines) {
-    g.beginPath(); g.moveTo(l[0], l[1]);
-    for (let i = 2; i < l.length; i += 2) g.lineTo(l[i], l[i + 1]);
-    g.stroke();
-  }
-});
-
 function sign(text: string, color = '#ff4f8b') {
   const c = document.createElement('canvas');
   c.width = 512; c.height = 128;
@@ -71,8 +60,6 @@ export class LevelView {
   private meshes: THREE.Mesh[] = [];
   private lever = new THREE.Group();
   private plate: THREE.Mesh;
-  private button: THREE.Mesh;
-  private roarSign: THREE.Sprite;
   private target = new THREE.Group();
   private stars: THREE.Mesh[] = [];
   private hammerArms: THREE.Mesh[] = [];
@@ -124,20 +111,6 @@ export class LevelView {
     const tossHint = sign('THROW A BALL', '#7c5cff');
     tossHint.position.set(-3.6, 2.4, -74.5);
     this.group.add(this.target, post, hit, tossHint);
-
-    // New stretch: roar wall, ghost path, heavy button
-    this.roarSign = sign('ROAR AT ME!', '#7c5cff');
-    this.roarSign.position.set(L.cracked.pos[0], 5.4, L.cracked.pos[2] + 0.6);
-    const g0 = L.entities[L.ghosts[0]].pos;
-    const lookSign = sign('LOOK FOR A PATH', '#2bb3c0');
-    lookSign.position.set(-3.6, 3.2, g0[2] + 2);
-    const bt = L.button;
-    this.button = new THREE.Mesh(new THREE.CylinderGeometry(bt.r, bt.r + 0.15, 0.3, 32), std(0xff4f5e, { emissive: 0x330000 }));
-    this.button.position.set(bt.pos[0], 0.15, bt.pos[2]);
-    this.button.receiveShadow = true;
-    const stompSign = sign('JUMP + STOMP!');
-    stompSign.position.set(-3.4, 2.6, bt.pos[2]);
-    this.group.add(this.roarSign, lookSign, this.button, stompSign);
 
     // Stars
     const sg = starGeometry();
@@ -204,7 +177,7 @@ export class LevelView {
     const cg = new THREE.SphereGeometry(1, 10, 8);
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < 38; i++) {
+    for (let i = 0; i < 26; i++) {
       const cloud = new THREE.Group();
       for (let j = 0; j < 4; j++) {
         const puff = new THREE.Mesh(cg, cloudMat);
@@ -213,7 +186,7 @@ export class LevelView {
         cloud.add(puff);
       }
       const side = i % 2 ? 1 : -1;
-      cloud.position.set(side * (15 + rnd() * 26), -7 - rnd() * 10, 10 - rnd() * 185);
+      cloud.position.set(side * (15 + rnd() * 26), -7 - rnd() * 10, 10 - rnd() * 125);
       cloud.scale.setScalar(0.8 + rnd() * 1.1);
       this.group.add(cloud);
     }
@@ -233,10 +206,6 @@ export class LevelView {
         top.needsUpdate = true;
         const side = std(new THREE.Color(e.color).multiplyScalar(0.6).getHex());
         material = [side, side, std(e.color, { map: top }), side, side, side];
-      } else if (e.tag === 'ghost') {
-        material = new THREE.MeshStandardMaterial({ color: e.color, emissive: 0x9b5cff, emissiveIntensity: 0.6, transparent: true, opacity: 0.05, depthWrite: false });
-      } else if (e.tag === 'cracked') {
-        material = std(e.color, { map: crackTex });
       } else if (e.tag === 'crate') {
         material = std(e.color, { map: crateTex });
       } else {
@@ -244,7 +213,7 @@ export class LevelView {
       }
       m = new THREE.Mesh(geo, material);
     }
-    m.castShadow = e.tag !== 'ground' && e.tag !== 'ghost';
+    m.castShadow = e.tag !== 'ground';
     m.receiveShadow = true;
     return m;
   }
@@ -269,23 +238,8 @@ export class LevelView {
     this.target.rotation.z += dt * (s.s[2] ? 10 : 0);
     this.target.scale.setScalar(s.s[2] ? 0.8 : 1 + Math.sin(time * 4) * 0.05);
 
-    for (const id of L.cracked.ids) this.meshes[id].visible = !s.s[3];
-    this.roarSign.visible = !s.s[3];
-    L.ghosts.forEach((id, i) => {
-      const gm = this.meshes[id].material as THREE.MeshStandardMaterial;
-      gm.opacity = 0.05 + s.gh[i] * 0.8;
-      gm.emissiveIntensity = 0.5 + Math.sin(time * 6 + i) * 0.2;
-    });
-    const bm = this.button.material as THREE.MeshStandardMaterial;
-    bm.color.setHex(s.s[4] ? 0x58e06a : 0xff4f5e);
-    bm.emissive.setHex(s.s[4] ? 0x0a4a12 : 0x330000);
-    this.button.position.y = s.s[4] ? 0.0 : 0.15;
-
     this.stars.forEach((st, i) => {
-      const gi = L.ghostStars.indexOf(i);
-      const shown = gi < 0 ? 1 : s.gh[L.ghosts.length + gi];
-      st.visible = !(s.stars & (1 << i)) && shown > 0;
-      st.scale.setScalar(shown);
+      st.visible = !(s.stars & (1 << i));
       st.rotation.y = time * 2 + i;
       st.position.y = L.stars[i][1] + Math.sin(time * 3 + i) * 0.15;
     });

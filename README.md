@@ -1,17 +1,6 @@
 # One Giant Monster
 
-Two to four players, one wobbly monster. Between you, you are its **legs**, **arms**, **head** and **special powers**. Get the monster through the obstacle course.
-
-| Role | Does |
-|---|---|
-| Legs | walks and jumps |
-| Arms | steers the hand: grab, carry, throw, pull levers |
-| Head | steers where the monster looks (the camera swings with it); ghost platforms and ghost stars only exist while the gaze spot is on them |
-| Special | **Roar** shoves loose things away and shatters cracked walls; **Stomp** slams the ground, and from mid-air it presses heavy buttons |
-
-All four roles are always in play. With fewer than four players some people hold two (by default Legs + Special and Arms + Head); the host can change who plays what in the lobby.
-
-**Solo:** "Play solo" makes you the arms; an autopilot (`src/game/Bots.ts`) walks, looks, roars and stomps, stops wherever the arms have a job, and shows a hint saying what to do.
+One wobbly monster with two brains: the **legs** and the **arms**. Play online with a friend (one each), or solo with both. Get the monster through the obstacle course.
 
 ## Run
 
@@ -20,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. For online play on your network, the other players open `http://<your-ip>:5173` and join with the room code.
+Open http://localhost:5173. For online play on your network, the second player opens `http://<your-ip>:5173` and joins with the room code.
 
 To serve the built game and the room server from one port:
 
@@ -47,7 +36,7 @@ The room server also serves the built game, so one Render web service runs every
    | Start command | `npm start` |
    | Environment variable | `NODE_VERSION` = `24` |
 
-4. Create the service. When the deploy shows as live, share the `https://<name>.onrender.com` address; one player creates a room and the others join with the code.
+4. Create the service. When the deploy shows as live, share the `https://<name>.onrender.com` address; one player creates a room and the other joins with the code.
 
 Notes:
 
@@ -59,23 +48,21 @@ Notes:
 
 ## Controls
 
-| | Online, your own keyboard | Everyone on one keyboard | Controller |
-|---|---|---|---|
-| Legs | `WASD` move, `Space` jump | `WASD`, `Space` | left stick or d-pad, `A` jump |
-| Arms | `WASD` hand, `Q` `E` reach, `Space` grab / drop / pull, hold `F` then release to throw | arrows, `,` `.`, `Right Shift`, hold `Enter` | left stick, `LB` `RB` reach, `A` grab, hold `X` or `RT` to throw |
-| Head | arrow keys | `I` `J` `K` `L` | right stick |
-| Special | `R` roar, `C` stomp | `Z` roar, `X` stomp | `B` roar, `Y` stomp |
+| | Online (one role each) | Solo (both roles) |
+|---|---|---|
+| Legs | `WASD` or arrows, `Space` jump | `WASD` move, `Space` jump |
+| Arms | `WASD` or arrows, `Q` `E` reach, `Space` grab / drop / pull, hold `F` then release to throw | arrows move the hand, `,` `.` reach in/out, `Right Shift` grab / drop / pull lever, hold `Enter` then release to throw |
 
-- Online, the arrow keys also move the legs or the hand unless you are the head as well. If you only play the head, `WASD` looks too.
-- If one person online holds both legs and arms, they get the one-keyboard layout.
-- Controllers on one device: controller 1 is legs + special, controller 2 is arms + head.
-- **Touch**: on phones and tablets a joystick and buttons appear for the roles you hold. All four roles on one phone is very cramped; use a tablet. Add `?touch=1` to the address to try them with a mouse.
-- `M` mutes sound.
+`M` mutes sound.
+
+**Controller** (standard layout). Online: Legs use the left stick or d-pad and `A` to jump; Arms use the left stick for the hand, `LB` / `RB` (or right stick) to reach, `A` to grab / drop / pull, hold `X` or `RT` then release to throw. Solo: left stick and `A` are the legs; the right stick is the hand, `RB` grabs and `RT` throws.
+
+**Touch**: on phones and tablets a joystick and buttons appear on screen. Solo has a move stick on the left with Jump, and a hand stick on the right with Grab and Throw; it works upright or sideways. Add `?touch=1` to the address to try them with a mouse.
 
 ## How it fits together
 
 - `src/game/` is the simulation: no DOM or rendering, driven by one input per role (`shared/protocol.ts`). Adding a body part means adding a role there.
 - `src/input/` merges keyboard, controllers and touch into those per-role inputs.
-- `src/render/` draws snapshots of the simulation; `src/net/` runs it on the room creator's machine and streams snapshots to the other players.
-- `server/index.ts` only manages rooms (a host and up to three guests) and relays messages.
+- `src/render/` draws snapshots of the simulation; `src/net/` runs it on the room creator's machine and streams snapshots to the other player.
+- `server/index.ts` only manages rooms and relays messages.
 - `npm test` runs the headless simulation tests.

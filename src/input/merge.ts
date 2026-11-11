@@ -1,4 +1,4 @@
-import type { ArmsInput, HeadInput, LegsInput, SpecialInput } from '../../shared/protocol.ts';
+import type { ArmsInput, LegsInput } from '../../shared/protocol.ts';
 
 /** The value furthest from zero wins, so whichever device is being pushed takes over. */
 export const pick = (...v: number[]) => v.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0);
@@ -15,14 +15,4 @@ export const mergeArms = (...s: ArmsInput[]): ArmsInput => ({
   reach: pick(...s.map((i) => i.reach)),
   grab: s.some((i) => i.grab),
   throw: s.some((i) => i.throw),
-});
-
-export const mergeHead = (...s: HeadInput[]): HeadInput => ({
-  lx: pick(...s.map((i) => i.lx)),
-  ly: pick(...s.map((i) => i.ly)),
-});
-
-export const mergeSpecial = (...s: SpecialInput[]): SpecialInput => ({
-  roar: s.some((i) => i.roar),
-  stomp: s.some((i) => i.stomp),
 });

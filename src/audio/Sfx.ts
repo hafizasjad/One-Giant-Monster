@@ -70,10 +70,6 @@ export class Sfx {
       case 'chaos-warn': this.tone(300, 300, 0.12, 'square', 0.15); this.tone(300, 300, 0.12, 'square', 0.15, 0.25); break;
       case 'chaos': this.noise(0.4, 0.5, 2500); this.tone(900, 150, 0.4, 'sawtooth', 0.25); break;
       case 'hic': this.tone(400, 1000, 0.09, 'sine', 0.35); break;
-      case 'roar': this.tone(160, 55, 0.7, 'sawtooth', 0.45); this.tone(230, 70, 0.6, 'square', 0.2); this.noise(0.6, 0.4, 700); break;
-      case 'stomp': this.tone(110, 35, 0.3, 'sine', 0.8); this.noise(0.22, 0.5, 350); break;
-      case 'smash': this.noise(0.7, 0.6, 1400); this.tone(200, 40, 0.5, 'square', 0.25); break;
-      case 'button': this.tone(300, 150, 0.15, 'square', 0.3); this.tone(600, 900, 0.25, 'triangle', 0.3, 0.12); break;
       case 'finish': [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => this.tone(f, f, 0.22, 'square', 0.2, i * 0.13)); break;
     }
   }

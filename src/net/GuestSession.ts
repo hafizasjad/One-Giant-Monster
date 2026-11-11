@@ -1,19 +1,19 @@
-import type { GameEvent, Role, RoleInput, Snapshot } from '../../shared/protocol.ts';
+import type { ArmsInput, GameEvent, LegsInput, Role, Snapshot } from '../../shared/protocol.ts';
 import type { Session } from './HostSession.ts';
 import type { NetClient } from './NetClient.ts';
 
 const DELAY = 0.1; // render this far behind the newest snapshot so there is always something to blend
 const INPUT_INTERVAL = 1 / 30;
 
-/** A non-host player: sends input for the roles it holds, draws interpolated snapshots from the host. */
+/** The non-host player: sends its own input, draws interpolated snapshots from the host. */
 export class GuestSession implements Session {
   private buf: Snapshot[] = [];
   private events: GameEvent[] = [];
   private offset: number | null = null; // local clock - sim clock
   private sendAcc = 0;
-  private lastSent = new Map<Role, string>();
+  private lastSent = '';
 
-  constructor(private net: NetClient, private roles: () => Role[], private input: (role: Role) => RoleInput) {}
+  constructor(private net: NetClient, private role: Role, private input: () => LegsInput | ArmsInput) {}
 
   receive(s: Snapshot) {
     const last = this.buf[this.buf.length - 1];
@@ -32,15 +32,13 @@ export class GuestSession implements Session {
   }
 
   update(dt: number): Snapshot | null {
+    const i = this.input();
+    const json = JSON.stringify(i);
     this.sendAcc += dt;
-    const due = this.sendAcc >= INPUT_INTERVAL;
-    if (due) this.sendAcc = 0;
-    for (const role of this.roles()) {
-      const i = this.input(role);
-      const json = JSON.stringify(i);
-      if (!due && json === this.lastSent.get(role)) continue;
-      this.net.send({ k: 'input', role, i });
-      this.lastSent.set(role, json);
+    if (json !== this.lastSent || this.sendAcc >= INPUT_INTERVAL) {
+      this.net.send({ k: 'input', role: this.role, i });
+      this.lastSent = json;
+      this.sendAcc = 0;
     }
 
     if (!this.buf.length || this.offset === null) return null;
@@ -81,6 +79,5 @@ function blend(a: Snapshot, b: Snapshot, k: number): Snapshot {
     const sgn = dot < 0 ? -1 : 1;
     for (let j = 3; j < 7; j++) bodies[o + j] = lerp(a.b[o + j], b.b[o + j] * sgn, k);
   }
-  const g = [lerp(a.g[0], b.g[0], k), lerp(a.g[1], b.g[1], k), b.g[2]];
-  return { ...b, m, h, g, b: bodies, ev: [] };
+  return { ...b, m, h, b: bodies, ev: [] };
 }

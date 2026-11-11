@@ -10,7 +10,7 @@ export interface EntityDef {
   pos: V3;
   body: BodyKind;
   color: number;
-  tag: string; // ground, wall, crate, ball, boulder, door, bridge, drawbridge, hammer, cracked, ghost, gate
+  tag: string; // ground, wall, crate, ball, boulder, door, bridge, drawbridge, hammer
   density?: number;
   restitution?: number;
   friction?: number;
@@ -35,11 +35,7 @@ export interface LevelDef {
   target: { pos: V3; r: number; bridge: number; hinge: V3; halfLen: number };
   hammers: HammerDef[];
   boulders: { ids: number[]; z: number; y: number; speed: number; interval: number };
-  cracked: { ids: number[]; pos: V3 }; // wall that only a roar breaks
-  ghosts: number[]; // platforms that only exist while the head looks at them
-  button: { pos: V3; r: number; gate: number; closedY: number; openY: number }; // needs a big stomp
   stars: V3[];
-  ghostStars: number[]; // indices into stars
   finishZ: number;
   killY: number;
 }
@@ -53,8 +49,7 @@ export function buildLevel(): LevelDef {
   // --- Ground ---------------------------------------------------------
   add({ shape: 'box', half: [5, 0.5, 21], pos: [0, -0.5, -13], body: 'fixed', color: 0x8ee07a, tag: 'ground' });
   add({ shape: 'box', half: [5, 0.5, 18], pos: [0, -0.5, -60], body: 'fixed', color: 0xffd76b, tag: 'ground' });
-  add({ shape: 'box', half: [5, 0.5, 10], pos: [0, -0.5, -96], body: 'fixed', color: 0x9fd8ff, tag: 'ground' });
-  add({ shape: 'box', half: [5, 0.5, 11], pos: [0, -0.5, -141], body: 'fixed', color: 0xffb3d1, tag: 'ground' });
+  add({ shape: 'box', half: [5, 0.5, 8], pos: [0, -0.5, -94], body: 'fixed', color: 0x9fd8ff, tag: 'ground' });
 
   // --- 1. Crate wall ---------------------------------------------------
   const crateColors = [0xff8a5c, 0xffb347, 0xff6f91, 0xf9c74f];
@@ -104,20 +99,6 @@ export function buildLevel(): LevelDef {
   const hinge: V3 = [0, -0.2, -86];
   const drawbridge = add({ shape: 'box', half: [2, 0.2, 4], pos: [0, 3.8, -86], body: 'kinematic', color: 0xc98b4b, tag: 'drawbridge' });
 
-  // --- 6. Cracked wall: only a roar gets through ---------------------------
-  const crackedPos: V3 = [0, 2.2, -99];
-  const cracked = [-3.4, 0, 3.4].map((x) =>
-    add({ shape: 'box', half: [1.7, 2.2, 0.4], pos: [x, 2.2, -99], body: 'fixed', color: 0xc9b79a, tag: 'cracked' }));
-
-  // --- 7. Ghost path over the pit: only there while the head looks ----------
-  const ghosts = [0, 2, 3.4, 2, 0, -2, -3.4, -2].map((x, i) =>
-    add({ shape: 'box', half: [1.5, 0.2, 1.5], pos: [x, -0.2, -107.5 - i * 3], body: 'fixed', color: 0xd9a8ff, tag: 'ghost' }));
-
-  // --- 8. Heavy button + gate: needs a stomp from mid-air --------------------
-  add({ shape: 'box', half: [1.7, 2.2, 0.4], pos: [-3.3, 2.2, -145], body: 'fixed', color: 0x8d7bd8, tag: 'wall' });
-  add({ shape: 'box', half: [1.7, 2.2, 0.4], pos: [3.3, 2.2, -145], body: 'fixed', color: 0x8d7bd8, tag: 'wall' });
-  const gate = add({ shape: 'box', half: [1.6, 2.2, 0.3], pos: [0, 2.2, -145], body: 'kinematic', color: 0x58c4ff, tag: 'gate' });
-
   const movable: number[] = [];
   entities.forEach((e, i) => { if (e.body !== 'fixed') movable.push(i); });
 
@@ -129,25 +110,17 @@ export function buildLevel(): LevelDef {
       { z: -22, pos: [0, MONSTER_Y, -23.5] },
       { z: -43, pos: [0, MONSTER_Y, -44.5] },
       { z: -67, pos: [0, MONSTER_Y, -68.5] },
-      { z: -88, pos: [0, MONSTER_Y, -89.5] },
-      { z: -131.5, pos: [0, MONSTER_Y, -133] },
     ],
     lever: { pos: [3.2, 3.2, -19.3], door, closedY: 2.2, openY: -2.45 }, // sinks into the floor so it never blocks the camera
     plate: { pos: [-3, 0, -30], half: 1.3, bridge, zIn: -31.4, zOut: -36.5 },
     target: { pos: [3.8, 3.2, -87.5], r: 1.6, bridge: drawbridge, hinge, halfLen: 4 },
     hammers,
     boulders: { ids: boulderIds, z: -65, y: 1.2, speed: 8, interval: 3.2 },
-    cracked: { ids: cracked, pos: crackedPos },
-    ghosts,
-    button: { pos: [0, 0, -138], r: 1.7, gate, closedY: 2.2, openY: -2.45 },
     stars: [
       [0, 1.5, -4], [-3, 4.3, -13], [3, 1.5, -16], [0, 1.5, -25],
       [0, 2.6, -40.5], [-4, 1.5, -52.5], [4, 4.3, -63.5], [0, 1.5, -82],
-      [0, 1.5, -102.5], [0, 3.6, -138],
-      [4, 1.5, -12], [-4, 1.5, -76], [3.4, 1.5, -113.5], // ghost stars
     ],
-    ghostStars: [10, 11, 12],
-    finishZ: -149,
+    finishZ: -96,
     killY: -10,
   };
 }

@@ -1,5 +1,4 @@
-// Relay server: rooms of up to four players (a host plus three guests). The host's messages
-// go to the guests, the guests' messages go to the host. No game logic.
+// Relay server: rooms of two players, messages forwarded verbatim. No game logic.
 // In production it also serves the built game from dist/.
 // Runs directly with Node (type stripping), so keep this file to erasable TypeScript.
 import { createReadStream, existsSync, statSync } from 'node:fs';
@@ -29,8 +28,7 @@ const http = createServer((req, res) => {
   createReadStream(file).pipe(res);
 });
 
-const MAX_GUESTS = 3;
-interface Room { host: WebSocket; guests: Map<number, WebSocket> }
+interface Room { host: WebSocket; guest: WebSocket | null }
 const rooms = new Map<string, Room>();
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
@@ -41,55 +39,47 @@ function newCode() {
     if (!rooms.has(code)) return code;
   }
 }
-const send = (ws: WebSocket | undefined, msg: object) => {
+const send = (ws: WebSocket | null, msg: object) => {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
 };
 
 const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 256 * 1024 });
 wss.on('connection', (ws) => {
   let code = '';
-  let id = -1; // 0 = host, 1..3 = guests
+  let isHost = false;
 
   ws.on('message', (raw) => {
     let m: any;
     try { m = JSON.parse(String(raw)); } catch { return; }
     if (m.t === 'create' && !code) {
       code = newCode();
-      id = 0;
-      rooms.set(code, { host: ws, guests: new Map() });
-      send(ws, { t: 'created', code, id });
+      isHost = true;
+      rooms.set(code, { host: ws, guest: null });
+      send(ws, { t: 'created', code });
     } else if (m.t === 'join' && !code) {
-      const want = String(m.code ?? '').toUpperCase();
-      const room = rooms.get(want);
+      const room = rooms.get(String(m.code ?? '').toUpperCase());
       if (!room) return send(ws, { t: 'error', msg: 'No room with that code' });
-      if (room.guests.size >= MAX_GUESTS) return send(ws, { t: 'error', msg: 'That room is full' });
-      code = want;
-      id = 1;
-      while (room.guests.has(id)) id++;
-      room.guests.set(id, ws);
-      send(ws, { t: 'joined', code, id });
-      send(room.host, { t: 'peer-joined', id });
+      if (room.guest) return send(ws, { t: 'error', msg: 'That room is full' });
+      code = String(m.code).toUpperCase();
+      room.guest = ws;
+      send(ws, { t: 'joined', code });
+      send(room.host, { t: 'peer-joined' });
     } else if (m.t === 'relay' && code) {
       const room = rooms.get(code);
-      if (!room) return;
-      if (id !== 0) send(room.host, { t: 'relay', d: m.d, from: id });
-      else if (typeof m.to === 'number') send(room.guests.get(m.to), { t: 'relay', d: m.d, from: 0 });
-      else for (const g of room.guests.values()) send(g, { t: 'relay', d: m.d, from: 0 });
+      if (room) send(isHost ? room.guest : room.host, { t: 'relay', d: m.d });
     }
   });
 
   ws.on('close', () => {
     const room = rooms.get(code);
     if (!room) return;
-    if (id === 0) {
-      for (const g of room.guests.values()) {
-        send(g, { t: 'peer-left', id: 0 });
-        g.close();
-      }
+    if (isHost) {
+      send(room.guest, { t: 'peer-left' });
+      room.guest?.close();
       rooms.delete(code);
-    } else if (room.guests.get(id) === ws) {
-      room.guests.delete(id);
-      send(room.host, { t: 'peer-left', id });
+    } else {
+      room.guest = null;
+      send(room.host, { t: 'peer-left' });
     }
   });
 });

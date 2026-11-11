@@ -3,17 +3,14 @@ import type { Collider, RigidBody, World } from '@dimforge/rapier3d-compat';
 import type { GameEvent, Inputs, Snapshot } from '../../shared/protocol.ts';
 import { Arms, type ArmsWorld } from './Arms.ts';
 import { Chaos } from './Chaos.ts';
-import { Head } from './Head.ts';
 import { buildLevel, type LevelDef, type V3 } from './level1.ts';
 import { GRAVITY, Monster, MONSTER_HALF, MONSTER_RADIUS } from './Monster.ts';
-import { ROAR_CD, Special, STOMP_CD } from './Special.ts';
 
 export const DT = 1 / 60;
 
 type P = { x: number; y: number; z: number };
 const r3 = (n: number) => Math.round(n * 1000) / 1000 + 0; // + 0 turns -0 into 0
 const BONKS = ['BONK!', 'OOF!', 'BOINK!', 'WHAM!', 'OW OW OW'];
-const GHOST_LINGER = 1.5; // seconds a ghost stays after the gaze leaves
 const FUMBLES = ['SPLAT!', 'Whoopsie!', 'Aaaaaah!', 'Gravity wins!'];
 
 export interface SimOptions {
@@ -31,8 +28,6 @@ export class Simulation {
   bodies: RigidBody[] = [];
   monster: Monster;
   arms: Arms;
-  head = new Head();
-  special = new Special();
   chaos: Chaos;
   armsWorld: ArmsWorld;
 
@@ -41,10 +36,6 @@ export class Simulation {
   leverOn = false;
   plateDown = false;
   targetHit = false;
-  wallBroken = false;
-  buttonDown = false;
-  /** Time left for each ghost: platforms first, then ghost stars. */
-  ghostT: number[];
   stars = 0;
   starCount = 0;
   fumbles = 0;
@@ -56,7 +47,6 @@ export class Simulation {
   private entityOf = new Map<number, number>(); // collider handle -> entity index
   private doorY: number;
   private bridgeZ: number;
-  private gateY: number;
   private drawAngle = Math.PI / 2;
   private hitCooldown = 0;
   private boulderTimer = 1;
@@ -86,9 +76,6 @@ export class Simulation {
       this.bodies.push(body);
     });
     for (const id of this.level.boulders.ids) this.bodies[id].setEnabled(false);
-    for (const id of this.level.ghosts) this.bodies[id].setEnabled(false);
-    this.ghostT = new Array(this.level.ghosts.length + this.level.ghostStars.length).fill(0);
-    this.gateY = this.level.button.closedY;
 
     this.doorY = this.level.lever.closedY;
     this.bridgeZ = this.level.plate.zIn;
@@ -152,14 +139,10 @@ export class Simulation {
 
     this.chaos.step(dt, this);
     this.moveMachines(dt);
-    this.head.step(dt, inputs.head, this.monster);
-    this.updateGhosts(dt);
-    this.special.step(dt, inputs.special, this);
     this.monster.step(dt, inputs.legs, this.include, {
       onJump: () => this.emit('jump', this.monster.pos),
-      onLand: (impact) => { if (!this.special.slam) this.emit('land', this.monster.pos, impact > 14 ? 'THUD!' : undefined); },
+      onLand: (impact) => this.emit('land', this.monster.pos, impact > 14 ? 'THUD!' : undefined),
     });
-    this.special.landed(this);
     this.arms.step(dt, inputs.arms, this.armsWorld);
     this.world.step();
     this.afterStep(dt);
@@ -184,14 +167,6 @@ export class Simulation {
       this.bridgeZ = approach(this.bridgeZ, bridgeTarget, 4 * dt);
       const bp = L.entities[L.plate.bridge].pos;
       this.bodies[L.plate.bridge].setTranslation({ x: bp[0], y: bp[1], z: this.bridgeZ }, true);
-    }
-
-    // Gate sinks once the heavy button has been stomped.
-    const gateTarget = this.buttonDown ? L.button.openY : L.button.closedY;
-    if (this.gateY !== gateTarget) {
-      this.gateY = approach(this.gateY, gateTarget, 4 * dt);
-      const gp = L.entities[L.button.gate].pos;
-      this.bodies[L.button.gate].setTranslation({ x: gp[0], y: this.gateY, z: gp[2] }, true);
     }
 
     // Drawbridge falls once the target has been hit.
@@ -219,77 +194,6 @@ export class Simulation {
     const b = this.bodies[t.bridge];
     b.setTranslation(pos, true);
     b.setRotation(rot, true);
-  }
-
-  // --- head and special ------------------------------------------------------
-
-  /** Ghosts are solid while the gaze is on them, and for a moment after. */
-  private updateGhosts(dt: number) {
-    const L = this.level, m = this.monster, t = this.ghostT;
-    L.ghosts.forEach((id, i) => {
-      const e = L.entities[id];
-      const seen = this.head.sees(e.pos[0], e.pos[1], e.pos[2]);
-      // The monster's weight keeps the one it is standing on real.
-      const standing = t[i] > 0 && Math.abs(m.pos.x - e.pos[0]) < e.half[0] + 0.5 && Math.abs(m.pos.z - e.pos[2]) < e.half[2] + 0.5
-        && Math.abs(m.feetY - (e.pos[1] + e.half[1])) < 0.5;
-      t[i] = seen ? GHOST_LINGER : standing ? Math.max(t[i], 0.4) : Math.max(0, t[i] - dt);
-      const solid = t[i] > 0;
-      if (this.bodies[id].isEnabled() !== solid) this.bodies[id].setEnabled(solid);
-    });
-    L.ghostStars.forEach((si, j) => {
-      const s = L.stars[si], n = L.ghosts.length + j;
-      t[n] = this.head.sees(s[0], s[1], s[2]) ? GHOST_LINGER : Math.max(0, t[n] - dt);
-    });
-  }
-
-  /** Shove everything loose away from the monster and shatter the cracked wall. */
-  roar() {
-    const L = this.level, m = this.monster, f = m.forward;
-    this.emit('roar', m.pos, 'ROOOAR!');
-    if (this.arms.held >= 0) this.arms.drop(this.armsWorld, true);
-    L.entities.forEach((e, i) => {
-      const b = this.bodies[i];
-      if (e.body !== 'dynamic' || !b.isEnabled()) return;
-      const t = b.translation();
-      let dx = t.x - m.pos.x, dz = t.z - m.pos.z;
-      const d = Math.hypot(dx, t.y - m.pos.y, dz);
-      if (d > 8) return;
-      const h = Math.hypot(dx, dz);
-      if (h < 0.2) { dx = f.x; dz = f.z; } else { dx /= h; dz /= h; }
-      const power = 16 * (1 - d / 8) + 5;
-      b.setLinvel({ x: dx * power, y: 4 + power * 0.25, z: dz * power }, true);
-      b.setAngvel({ x: dz * 5, y: 0, z: -dx * 5 }, true);
-    });
-    if (!this.wallBroken) {
-      const w = L.cracked.pos, dx = w[0] - m.pos.x, dz = w[2] - m.pos.z;
-      const d = Math.hypot(dx, dz);
-      if (d < 7 && (dx * f.x + dz * f.z) / Math.max(d, 1e-3) > 0.3) {
-        this.wallBroken = true;
-        for (const id of L.cracked.ids) this.bodies[id].setEnabled(false);
-        this.emit('smash', toP(w), 'CRUMBLE!');
-      }
-    }
-  }
-
-  /** A stomp touching down. Only a big one (started in mid-air) presses the heavy button. */
-  shock(big: boolean) {
-    const L = this.level, m = this.monster;
-    this.emit('stomp', { x: m.pos.x, y: m.feetY, z: m.pos.z }, big ? 'STOMP!' : 'stomp.');
-    const range = big ? 4.5 : 2.5;
-    L.entities.forEach((e, i) => {
-      const b = this.bodies[i];
-      if (e.body !== 'dynamic' || !b.isEnabled() || i === this.arms.held) return;
-      const t = b.translation();
-      const dx = t.x - m.pos.x, dz = t.z - m.pos.z, h = Math.hypot(dx, dz);
-      if (h > range || Math.abs(t.y - m.feetY) > 2.5) return;
-      const n = Math.max(h, 0.3);
-      b.setLinvel({ x: (dx / n) * 3, y: big ? 8 : 4, z: (dz / n) * 3 }, true);
-    });
-    const bt = L.button;
-    if (big && !this.buttonDown && Math.hypot(m.pos.x - bt.pos[0], m.pos.z - bt.pos[2]) < bt.r && Math.abs(m.feetY - bt.pos[1]) < 0.6) {
-      this.buttonDown = true;
-      this.emit('button', toP(bt.pos), 'KA-CHUNK!');
-    }
   }
 
   // --- rules ---------------------------------------------------------------
@@ -355,8 +259,6 @@ export class Simulation {
     // Stars
     L.stars.forEach((s, i) => {
       if (this.stars & (1 << i)) return;
-      const g = L.ghostStars.indexOf(i);
-      if (g >= 0 && this.ghostT[L.ghosts.length + g] <= 0) return; // not looked at: not there
       if (dist(m.pos, s) < 1.8 || dist(this.arms.pos, s) < 1.1) {
         this.stars |= 1 << i;
         this.starCount++;
@@ -377,7 +279,7 @@ export class Simulation {
     }
     if (!this.finished && m.pos.z < L.finishZ && m.grounded) {
       this.finished = true;
-      this.finalScore = Math.max(0, 4200 - Math.floor(this.playTime) * 10) + this.starCount * 200 - this.fumbles * 100;
+      this.finalScore = Math.max(0, 3000 - Math.floor(this.playTime) * 10) + this.starCount * 200 - this.fumbles * 100;
       this.finalScore = Math.max(0, this.finalScore);
       this.emit('finish', m.pos, 'FINISH!');
     }
@@ -443,11 +345,8 @@ export class Simulation {
       t: r3(this.time),
       m: [r3(m.pos.x), r3(m.pos.y), r3(m.pos.z), r3(m.yaw), r3(m.speed), m.grounded ? 1 : 0, r3(m.vy)],
       h: [r3(a.pos.x), r3(a.pos.y), r3(a.pos.z), a.held, r3(a.charge)],
-      g: [r3(this.head.yaw), r3(this.head.dist), r3(this.head.spot.y)],
-      gh: this.ghostT.map((t) => r3(Math.min(1, t / 0.5))),
-      sp: [r3(this.special.roarCd / ROAR_CD), r3(this.special.stompCd / STOMP_CD)],
       b,
-      s: [this.leverOn ? 1 : 0, this.plateDown ? 1 : 0, this.targetHit ? 1 : 0, this.wallBroken ? 1 : 0, this.buttonDown ? 1 : 0],
+      s: [this.leverOn ? 1 : 0, this.plateDown ? 1 : 0, this.targetHit ? 1 : 0],
       stars: this.stars,
       sc: [r3(this.playTime), this.fumbles, this.finished ? 1 : 0, this.finalScore, this.starCount],
       ch: c ? { name: c.name, warn: c.warn, t: r3(c.t) } : null,
