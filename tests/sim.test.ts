@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { emptyInputs, type Inputs } from '../shared/protocol.ts';
 import { buildLevel, MONSTER_Y } from '../src/game/level1.ts';
+import { buildLevel2 } from '../src/game/level2.ts';
 import { LEVELS } from '../src/game/levels.ts';
 import { Simulation } from '../src/game/Simulation.ts';
 
@@ -179,5 +180,129 @@ describe('levels', () => {
     expect(sim.bodies[door2].translation().y).toBeLessThan(-2);
     expect(sim.bodies[level.levers[0].door].translation().y).toBeGreaterThan(2); // the other door stays shut
     expect(sim.snapshot().s).toEqual([0, 1, 0, 0]);
+  });
+});
+
+describe('level 2: Double Trouble', () => {
+  const make2 = () => new Simulation(RAPIER, { chaos: false, level: buildLevel2() });
+  /** Stand under a lever, raise the hand and pull. */
+  function pull(sim: Simulation, lever: number) {
+    const lv = sim.level.levers[lever];
+    sim.monster.teleport([lv.pos[0], MONSTER_Y, lv.pos[2] + 1.9]);
+    run(sim, 20);
+    run(sim, 60, (i) => { i.arms.ay = 1; });
+    tapGrab(sim);
+    run(sim, 120);
+  }
+
+  it('each of the three levers opens only its own door', () => {
+    const sim = make2();
+    const doorY = (n: number) => sim.bodies[sim.level.levers[n].door].translation().y;
+    pull(sim, 0);
+    expect(sim.levers).toEqual([true, false, false]);
+    expect([doorY(0) < -2, doorY(1) > 2, doorY(2) > 2]).toEqual([true, true, true]);
+
+    // through door 1, then stopped by door 2
+    sim.monster.teleport([0, MONSTER_Y, -6]);
+    run(sim, 200, (i) => { i.legs.mz = -1; });
+    expect(sim.monster.pos.z).toBeLessThan(-12);
+    expect(sim.monster.pos.z).toBeGreaterThan(-17.5);
+
+    pull(sim, 1);
+    sim.monster.teleport([0, MONSTER_Y, -14]);
+    run(sim, 100, (i) => { i.legs.mz = -1; });
+    expect(sim.monster.pos.z).toBeLessThan(-20);
+    expect(sim.cp).toBe(0);
+
+    pull(sim, 2);
+    sim.monster.teleport([0, MONSTER_Y, -61]);
+    run(sim, 100, (i) => { i.legs.mz = -1; });
+    expect(sim.monster.pos.z).toBeLessThan(-66);
+  });
+
+  it('a carried crate fits through a door and onto the plate, which bridges the gap', () => {
+    const sim = make2();
+    const plate = sim.level.plates[0];
+    pull(sim, 0);
+    // pick up the crate at the start and walk it through door 1
+    sim.monster.teleport([2.5, MONSTER_Y, -0.6]);
+    run(sim, 20);
+    // hover the hand just above the crate (pressing down onto it would shove it away)
+    run(sim, 60, (i) => { i.arms.ay = sim.arms.local.y > 1.5 ? -1 : 0; i.arms.reach = sim.arms.local.f < 2.4 ? 1 : 0; });
+    tapGrab(sim);
+    const crate = sim.arms.held;
+    expect(sim.level.entities[crate]?.tag).toBe('crate');
+    run(sim, 40, (i) => { i.arms.ay = 1; });
+    run(sim, 60, (i) => { i.legs.mx = -1; });
+    run(sim, 200, (i) => { i.legs.mx = Math.abs(sim.monster.pos.x) > 0.3 ? -Math.sign(sim.monster.pos.x) : 0; i.legs.mz = -1; });
+    expect(sim.arms.held).toBe(crate); // still holding it on the far side of door 1
+    expect(sim.monster.pos.z).toBeLessThan(-12);
+
+    // let go, then put it on the plate (door 2 is tested above)
+    tapGrab(sim);
+    expect(sim.arms.held).toBe(-1);
+    sim.bodies[crate].setTranslation({ x: plate.pos[0], y: 0.7, z: plate.pos[2] }, true);
+    run(sim, 150);
+    expect(sim.plates[0]).toBe(true);
+    expect(sim.bodies[plate.bridge].translation().z).toBeCloseTo(plate.zOut, 1);
+
+    sim.monster.teleport([0, MONSTER_Y, -29]);
+    run(sim, 20);
+    run(sim, 150, (i) => { i.legs.mz = sim.monster.pos.z > -40 ? -1 : 0; i.legs.jump = sim.monster.pos.z < -34.3; });
+    expect(sim.monster.pos.z).toBeLessThan(-38.5);
+    expect(sim.fumbles).toBe(0);
+    expect(sim.cp).toBe(1);
+  });
+
+  it('two targets drop two drawbridges, and the far balls stay put until needed', () => {
+    const sim = make2();
+    const [t1, t2] = sim.level.targets;
+    const balls = sim.level.entities.map((e, i) => (e.tag === 'ball' ? i : -1)).filter((i) => i >= 0);
+    const islandBall = balls.find((i) => sim.level.entities[i].pos[2] < -80)!;
+    run(sim, 240);
+    // island balls must not be treated as stranded while target 1 is still up
+    expect(sim.bodies[islandBall].translation().z).toBeCloseTo(sim.level.entities[islandBall].pos[2], 0);
+    expect(sim.bodies[islandBall].translation().y).toBeLessThan(1);
+
+    sim.bodies[balls[0]].setTranslation({ x: t1.pos[0], y: t1.pos[1], z: t1.pos[2] }, true);
+    run(sim, 200);
+    expect(sim.targets).toEqual([true, false]);
+    sim.monster.teleport([0, MONSTER_Y, -74]);
+    run(sim, 20);
+    run(sim, 300, (i) => { i.legs.mz = sim.monster.pos.z > -90 ? -1 : 0; });
+    expect(sim.monster.pos.z).toBeLessThan(-86);
+    expect(sim.cp).toBe(3);
+    expect(sim.finished).toBe(false);
+
+    sim.bodies[islandBall].setTranslation({ x: t2.pos[0], y: t2.pos[1], z: t2.pos[2] }, true);
+    run(sim, 200);
+    expect(sim.targets).toEqual([true, true]);
+    run(sim, 400, (i) => { i.legs.mz = sim.finished ? 0 : -1; });
+    expect(sim.finished).toBe(true);
+    expect(sim.fumbles).toBe(0);
+  });
+
+  it('a real throw from the edge can hit each target', () => {
+    // Find a charge that works from the natural standing spot, like a player would.
+    for (const n of [0, 1]) {
+      let hit = -1;
+      for (let frames = 12; frames <= 54 && hit < 0; frames += 3) {
+        const sim = make2();
+        const tg = sim.level.targets[n];
+        const ball = sim.level.entities.findIndex((e) => e.tag === 'ball' && e.pos[2] > tg.strandedZ && e.pos[2] < tg.strandedZ + 12);
+        const standZ = tg.hinge[2] + 8 + 1; // one step back from the edge of the pit
+        sim.monster.teleport([tg.pos[0], MONSTER_Y, standZ + 1.5]);
+        run(sim, 10);
+        run(sim, 40, (i) => { i.legs.mz = -0.6; }); // step forward so it faces the target
+        const h = sim.arms.pos;
+        sim.bodies[ball].setTranslation({ x: h.x, y: h.y, z: h.z }, true);
+        tapGrab(sim);
+        if (sim.arms.held !== ball) continue;
+        run(sim, frames, (i) => { i.arms.throw = true; });
+        run(sim, 120);
+        if (sim.targets[n]) hit = frames;
+      }
+      expect(hit, `target ${n + 1} can be hit`).toBeGreaterThan(0);
+    }
   });
 });

@@ -237,7 +237,8 @@ export class Simulation {
         if (dist(t, tg.pos) < tg.r) {
           this.targets[n] = true;
           this.emit('target', toP(tg.pos), 'BULLSEYE!');
-        } else if (t.z < tg.strandedZ) {
+        } else if (e.pos[2] > tg.strandedZ && t.z < tg.strandedZ) {
+          // only balls that started on the near side of this target's pit
           stranded = true;
         }
       });
