@@ -110,7 +110,7 @@ describe('course', () => {
     expect(sim.fumbles).toBe(0);
   });
 
-  it('a ball on the target drops the drawbridge and the monster can finish', () => {
+  it('a ball on the target drops the drawbridge and the monster can cross', () => {
     const sim = make();
     const { target } = sim.level;
     const ball = sim.level.entities.findIndex((e) => e.tag === 'ball');
@@ -121,8 +121,9 @@ describe('course', () => {
     sim.monster.teleport([0, MONSTER_Y, -76]);
     run(sim, 20);
     run(sim, 300, (i) => { i.legs.mz = -1; });
-    expect(sim.finished).toBe(true);
-    expect(sim.finalScore).toBeGreaterThan(0);
+    expect(sim.monster.pos.z).toBeLessThan(-90);
+    expect(sim.cp).toBe(3);
+    expect(sim.finished).toBe(false); // the cracked wall is still in the way
   });
 
   it('hammers knock the monster about', () => {
@@ -142,5 +143,133 @@ describe('course', () => {
     const snap = sim.snapshot();
     expect(JSON.parse(JSON.stringify(snap))).toEqual(snap);
     expect(snap.b.length).toBe(sim.level.movable.length * 7);
+  });
+});
+
+/** Steer the gaze at a point, the way a Head player would. */
+function aim(sim: Simulation, i: Inputs, x: number, z: number) {
+  const m = sim.monster.pos;
+  const dyaw = Math.atan2(x - m.x, -(z - m.z)) - sim.head.yaw;
+  const ddist = Math.hypot(x - m.x, z - m.z) - sim.head.dist;
+  i.head.lx = Math.abs(dyaw) > 0.04 ? Math.sign(dyaw) : 0;
+  i.head.ly = Math.abs(ddist) > 0.2 ? Math.sign(ddist) : 0;
+}
+
+/** Head looks at the next ghost tile, legs only step onto tiles that are there. */
+function crossGhosts(sim: Simulation, maxSteps = 1500) {
+  const tiles = sim.level.ghosts.map((id) => sim.level.entities[id].pos);
+  for (let n = 0; n < maxSteps && sim.monster.pos.z > -131; n++) {
+    const i = emptyInputs();
+    const m = sim.monster.pos;
+    const next = tiles.findIndex((t) => t[2] < m.z - 0.4);
+    if (next < 0) {
+      i.legs.mz = -1;
+    } else {
+      const t = tiles[next];
+      aim(sim, i, t[0], t[2]);
+      if (sim.ghostT[next] > 0.5) {
+        const dx = t[0] - m.x, dz = t[2] - m.z, d = Math.hypot(dx, dz);
+        i.legs.mx = dx / d;
+        i.legs.mz = dz / d;
+      }
+    }
+    sim.step(i);
+  }
+}
+
+describe('head', () => {
+  it('ghost platforms are not there unless the head looks at them', () => {
+    const sim = make();
+    sim.monster.teleport([0, MONSTER_Y, -104]);
+    run(sim, 120, (i) => { i.head.ly = 1; }); // stare far into the distance
+    expect(sim.bodies[sim.level.ghosts[0]].isEnabled()).toBe(false);
+    for (let n = 0; n < 300 && sim.fumbles === 0; n++) run(sim, 1, (i) => { i.legs.mz = -1; });
+    expect(sim.fumbles).toBe(1);
+  });
+
+  it('looking makes a ghost platform solid, and it fades after the gaze leaves', () => {
+    const sim = make();
+    sim.monster.teleport([0, MONSTER_Y, -104]);
+    const t0 = sim.level.entities[sim.level.ghosts[0]].pos;
+    run(sim, 90, (i) => aim(sim, i, t0[0], t0[2]));
+    expect(sim.bodies[sim.level.ghosts[0]].isEnabled()).toBe(true);
+    expect(sim.snapshot().gh[0]).toBe(1);
+    run(sim, 150, (i) => { i.head.ly = 1; });
+    expect(sim.bodies[sim.level.ghosts[0]].isEnabled()).toBe(false);
+  });
+
+  it('with the head leading, the monster crosses the ghost path', () => {
+    const sim = make();
+    sim.monster.teleport([0, MONSTER_Y, -104]);
+    run(sim, 10);
+    crossGhosts(sim);
+    expect(sim.fumbles).toBe(0);
+    expect(sim.monster.pos.z).toBeLessThan(-131);
+    expect(sim.stars & (1 << 12)).toBeTruthy(); // the ghost star on the path
+  });
+});
+
+describe('special', () => {
+  it('roar shoves loose crates away and goes on cooldown', () => {
+    const sim = make();
+    sim.monster.teleport([0, MONSTER_Y, -5.5]);
+    run(sim, 20);
+    const crate = sim.level.entities.findIndex((e) => e.tag === 'crate');
+    run(sim, 2, (i, n) => { i.special.roar = n === 0; });
+    expect(sim.bodies[crate].linvel().z).toBeLessThan(-5);
+    expect(sim.special.roarCd).toBeGreaterThan(3);
+    expect(sim.wallBroken).toBe(false); // far too far away
+  });
+
+  it('roar shatters the cracked wall so the monster can walk through', () => {
+    const sim = make();
+    sim.monster.teleport([0, MONSTER_Y, -94]);
+    run(sim, 90, (i) => { i.legs.mz = -1; });
+    expect(sim.monster.pos.z).toBeGreaterThan(-98); // blocked
+    run(sim, 2, (i, n) => { i.special.roar = n === 0; });
+    expect(sim.wallBroken).toBe(true);
+    run(sim, 90, (i) => { i.legs.mz = -1; });
+    expect(sim.monster.pos.z).toBeLessThan(-101);
+  });
+
+  it('only a stomp from mid-air presses the heavy button', () => {
+    const sim = make();
+    const b = sim.level.button;
+    sim.monster.teleport([b.pos[0], MONSTER_Y, b.pos[2]]);
+    run(sim, 20);
+    run(sim, 2, (i, n) => { i.special.stomp = n === 0; }); // from the ground: just a little hop
+    run(sim, 90);
+    expect(sim.buttonDown).toBe(false);
+    run(sim, 200); // cooldown
+
+    run(sim, 12, (i) => { i.legs.jump = true; });
+    expect(sim.monster.grounded).toBe(false);
+    run(sim, 2, (i, n) => { i.special.stomp = n === 0; });
+    run(sim, 60);
+    expect(sim.buttonDown).toBe(true);
+    run(sim, 120);
+    expect(sim.bodies[b.gate].translation().y).toBeLessThan(-2);
+  });
+});
+
+describe('whole new stretch', () => {
+  it('roar, ghost path, stomp, finish', () => {
+    const sim = make();
+    sim.monster.teleport([0, MONSTER_Y, -94]);
+    run(sim, 20);
+    run(sim, 2, (i, n) => { i.special.roar = n === 0; });
+    run(sim, 200, (i) => { i.legs.mz = sim.monster.pos.z > -104 ? -1 : 0; });
+    crossGhosts(sim);
+    run(sim, 200, (i) => {
+      i.legs.mz = sim.monster.pos.z > -138 ? -1 : 0;
+      i.legs.mx = Math.abs(sim.monster.pos.x) > 0.2 ? -Math.sign(sim.monster.pos.x) : 0;
+    });
+    run(sim, 12, (i) => { i.legs.jump = true; });
+    run(sim, 2, (i, n) => { i.special.stomp = n === 0; });
+    run(sim, 150);
+    run(sim, 300, (i) => { i.legs.mz = sim.finished ? 0 : -1; });
+    expect(sim.finished).toBe(true);
+    expect(sim.finalScore).toBeGreaterThan(0);
+    expect(sim.fumbles).toBe(0);
   });
 });

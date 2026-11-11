@@ -1,5 +1,5 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
-import { emptyInputs, type ArmsInput, type GameEvent, type Inputs, type LegsInput, type Role, type Snapshot } from '../../shared/protocol.ts';
+import { emptyInputs, type GameEvent, type Inputs, type Role, type RoleInput, type Snapshot } from '../../shared/protocol.ts';
 import { DT, Simulation } from '../game/Simulation.ts';
 import type { NetClient } from './NetClient.ts';
 
@@ -26,8 +26,7 @@ export class HostSession implements Session {
   private acc = 0;
   private sendAcc = 0;
   private remote: Inputs = emptyInputs();
-  private latchJump = false;
-  private latchGrab = false;
+  private latch = { jump: false, grab: false, roar: false, stomp: false };
   private outbox: GameEvent[] = [];
   private last: Snapshot;
 
@@ -41,14 +40,13 @@ export class HostSession implements Session {
   }
 
   /** Called when the guest's input arrives. Quick taps are latched so none get lost between steps. */
-  remoteInput(role: Role, i: LegsInput | ArmsInput) {
-    if (role === 'legs') {
-      this.remote.legs = i as LegsInput;
-      if (this.remote.legs.jump) this.latchJump = true;
-    } else {
-      this.remote.arms = i as ArmsInput;
-      if (this.remote.arms.grab) this.latchGrab = true;
-    }
+  remoteInput(role: Role, i: RoleInput) {
+    (this.remote as Record<Role, RoleInput>)[role] = i;
+    const r = this.remote, l = this.latch;
+    if (r.legs.jump) l.jump = true;
+    if (r.arms.grab) l.grab = true;
+    if (r.special.roar) l.roar = true;
+    if (r.special.stomp) l.stomp = true;
   }
 
   restart() {
@@ -65,10 +63,14 @@ export class HostSession implements Session {
       while (this.acc >= DT) {
         this.acc -= DT;
         const local = this.opts.local();
-        const legs = local.legs ?? { ...this.remote.legs, jump: this.remote.legs.jump || this.latchJump };
-        const arms = local.arms ?? { ...this.remote.arms, grab: this.remote.arms.grab || this.latchGrab };
-        this.latchJump = this.latchGrab = false;
-        this.sim.step({ legs, arms });
+        const r = this.remote, l = this.latch;
+        this.sim.step({
+          legs: local.legs ?? { ...r.legs, jump: r.legs.jump || l.jump },
+          arms: local.arms ?? { ...r.arms, grab: r.arms.grab || l.grab },
+          head: local.head ?? r.head,
+          special: local.special ?? { roar: r.special.roar || l.roar, stomp: r.special.stomp || l.stomp },
+        });
+        l.jump = l.grab = l.roar = l.stomp = false;
       }
     }
     this.last = this.sim.snapshot();

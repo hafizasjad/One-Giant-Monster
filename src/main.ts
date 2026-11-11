@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { emptyInputs, otherRole, type PeerMsg, type Role, type Snapshot } from '../shared/protocol.ts';
+import { reassign, ROLES, splitRoles, type Inputs, type PeerMsg, type Role, type RoleInput, type RoleMap, type Snapshot } from '../shared/protocol.ts';
 import { Sfx } from './audio/Sfx.ts';
 import { CHAOS_LABEL } from './game/Chaos.ts';
 import { buildLevel } from './game/level1.ts';
@@ -24,11 +24,18 @@ let session: Session;
 let host: HostSession | null = null;
 let guest: GuestSession | null = null;
 let net: NetClient | null = null;
-let hostRole: Role = 'legs';
-let peerHere = false;
+/** Players in the room (0 = host). The host keeps this up to date and tells the guests. */
+let players: number[] = [0];
+let roles: RoleMap = splitRoles(players);
 let inGame = false;
 let lastSnap: Snapshot | null = null;
 let resultsTimer = 0;
+
+const myId = () => net?.id ?? 0;
+/** The roles played on this machine. */
+const mine = (): Role[] => (mode === 'local' ? ROLES : ROLES.filter((r) => roles[r] === myId()));
+const ROLE_NAME: Record<Role, string> = { legs: 'Legs', arms: 'Arms', head: 'Head', special: 'Special' };
+const playerName = (id: number) => (id === myId() ? 'You' : id === 0 ? 'Host' : `Player ${id + 1}`);
 
 window.addEventListener('pointerdown', () => sfx.unlock());
 window.addEventListener('keydown', (e) => {
@@ -50,89 +57,137 @@ function setSession(s: Session, m: Mode) {
   show('results', false);
   show('notice', false);
   show('hud', inGame);
-  if (!inGame) kb.touch.show(null);
+  if (!inGame) kb.setRoles([], false);
 }
 
 function toMenu(message = '') {
   net?.close();
   net = null;
-  peerHere = false;
-  setSession(new HostSession(RAPIER, { local: emptyInputs, chaos: false }), 'menu');
+  players = [0];
+  roles = splitRoles(players);
+  setSession(new HostSession(RAPIER, { local: () => ({}), chaos: false }), 'menu');
   show('lobby', false);
   show('menu', true);
   $('menuError').textContent = message;
 }
 
-const K = (s: string) => `<kbd>${s}</kbd>`;
-type Controls = 'shared' | Role;
-const PAD_LEGS = `left stick move · ${K('A')} jump`;
-const PAD_ARMS = `left stick hand · ${K('LB')}${K('RB')} reach · ${K('A')} grab/drop/pull · hold ${K('X')} throw`;
-const HELP: Record<'keyboard' | 'gamepad', Record<Controls, string>> = {
-  keyboard: {
-    shared: `<span><b>LEGS</b> ${K('W')}${K('A')}${K('S')}${K('D')} move · ${K('Space')} jump</span>` +
-      `<span><b>ARMS</b> ${K('←')}${K('↑')}${K('↓')}${K('→')} hand · ${K(',')}${K('.')} reach · ${K('R-Shift')} grab/drop · hold ${K('Enter')} throw</span>`,
-    legs: `<span><b>YOU ARE THE LEGS</b> ${K('W')}${K('A')}${K('S')}${K('D')} or arrows to move · ${K('Space')} jump</span>`,
-    arms: `<span><b>YOU ARE THE ARMS</b> ${K('W')}${K('A')}${K('S')}${K('D')} or arrows move the hand · ${K('Q')}${K('E')} reach in/out · ${K('Space')} grab/drop/pull · hold ${K('F')} then release to throw</span>`,
-  },
-  gamepad: {
-    shared: `<span><b>LEGS</b> controller 1: ${PAD_LEGS}</span><span><b>ARMS</b> controller 2 (or keyboard): ${PAD_ARMS}</span>`,
-    legs: `<span><b>YOU ARE THE LEGS</b> ${PAD_LEGS}</span>`,
-    arms: `<span><b>YOU ARE THE ARMS</b> ${PAD_ARMS}</span>`,
-  },
-};
-
-let controls: Controls = 'shared';
-/** Show the help and on-screen buttons for the roles played on this device. */
-function useControls(c: Controls = controls) {
-  controls = c;
-  kb.touch.show(c === 'shared' ? ['legs', 'arms'] : [c]);
-  if (kb.device !== 'touch') $('help').innerHTML = HELP[kb.device][c];
+/** Inputs for every role played on this machine. */
+function localInputs(): Partial<Inputs> {
+  const out: Partial<Record<Role, RoleInput>> = {};
+  for (const r of mine()) out[r] = kb.read(r);
+  return out as Partial<Inputs>;
 }
-kb.onDevice = () => { if (inGame) useControls(); };
+
+// --- controls help -----------------------------------------------------------
+
+const K = (s: string) => `<kbd>${s}</kbd>`;
+const WASD = K('W') + K('A') + K('S') + K('D');
+const ARROWS = K('←') + K('↑') + K('↓') + K('→');
+
+function helpFor(role: Role): string {
+  const shared = kb.scheme === 'shared';
+  if (kb.device === 'gamepad') {
+    const pad = shared ? (role === 'legs' || role === 'special' ? 'controller 1: ' : 'controller 2: ') : '';
+    return pad + {
+      legs: `left stick move · ${K('A')} jump`,
+      arms: `left stick hand · ${K('LB')}${K('RB')} reach · ${K('A')} grab/drop/pull · hold ${K('X')} throw`,
+      head: 'right stick look',
+      special: `${K('B')} roar · ${K('Y')} stomp`,
+    }[role];
+  }
+  if (shared) {
+    return {
+      legs: `${WASD} move · ${K('Space')} jump`,
+      arms: `${ARROWS} hand · ${K(',')}${K('.')} reach · ${K('R-Shift')} grab/drop · hold ${K('Enter')} throw`,
+      head: `${K('I')}${K('J')}${K('K')}${K('L')} look`,
+      special: `${K('Z')} roar · ${K('X')} stomp`,
+    }[role];
+  }
+  return {
+    legs: `${WASD} move · ${K('Space')} jump`,
+    arms: `${WASD} hand · ${K('Q')}${K('E')} reach · ${K('Space')} grab/drop/pull · hold ${K('F')} throw`,
+    head: `${kb.onlyLooks ? `${WASD} or ` : ''}${ARROWS} look around`,
+    special: `${K('R')} roar · ${K('C')} stomp (jump first!)`,
+  }[role];
+}
+
+function refreshHelp() {
+  if (kb.device === 'touch') return; // the on-screen buttons are labelled
+  $('help').innerHTML = mine().map((r) => `<span><b>${ROLE_NAME[r].toUpperCase()}</b> ${helpFor(r)}</span>`).join('');
+}
+kb.onDevice = () => { if (inGame) refreshHelp(); };
+
+/** Set up keys, on-screen buttons and help for the roles played on this machine. */
+function useControls() {
+  const m = mine();
+  kb.setRoles(m, mode === 'local');
+  refreshHelp();
+  const who = m.map((r) => ROLE_NAME[r]).join(' + ') || 'Watching';
+  $('whoText').textContent = mode === 'local' ? 'One device' : `Room ${net!.code} · ${who}`;
+}
+
+// --- starting a game ---------------------------------------------------------
 
 function startLocal() {
-  setSession(new HostSession(RAPIER, { local: () => ({ legs: kb.legs('shared'), arms: kb.arms('shared') }) }), 'local');
+  setSession(new HostSession(RAPIER, { local: localInputs }), 'local');
   show('menu', false);
-  $('whoText').textContent = 'One device';
-  useControls('shared');
+  useControls();
 }
 
 function startHosting() {
-  const role = hostRole;
-  setSession(new HostSession(RAPIER, {
-    net: net!,
-    local: () => (role === 'legs' ? { legs: kb.legs('solo') } : { arms: kb.arms('solo') }),
-  }), 'host');
+  setSession(new HostSession(RAPIER, { net: net!, local: localInputs }), 'host');
   show('lobby', false);
-  $('whoText').textContent = `Room ${net!.code}`;
-  useControls(role);
-  net!.send({ k: 'start', hostRole: role });
+  useControls();
+  net!.send({ k: 'start', roles });
+  updateWaiting();
 }
 
-function startGuest(role: Role) {
-  setSession(new GuestSession(net!, role, () => (role === 'legs' ? kb.legs('solo') : kb.arms('solo'))), 'guest');
+function startGuest() {
+  setSession(new GuestSession(net!, mine, (r) => kb.read(r)), 'guest');
   show('lobby', false);
-  $('whoText').textContent = `Room ${net!.code}`;
-  useControls(role);
+  useControls();
 }
 
 // --- lobby -----------------------------------------------------------------
 
-function renderLobby(isHost: boolean) {
+function renderLobby() {
+  const isHost = myId() === 0;
   show('menu', false);
   show('lobby', true);
   $('lobbyCode').textContent = net!.code;
-  show('rolePick', isHost);
+  $('lobbyTitle').textContent = isHost ? 'Share this room code' : 'You joined room';
+  const n = players.length;
+  const canEdit = isHost && n > 1;
+  $('roleList').replaceChildren(...ROLES.map((r) => {
+    const b = document.createElement('button');
+    b.className = (roles[r] === myId() ? 'on' : 'alt') + (canEdit ? '' : ' fixed');
+    b.textContent = `${ROLE_NAME[r]}: ${playerName(roles[r])}`;
+    b.onclick = () => {
+      if (!canEdit) return;
+      roles = { ...roles, [r]: players[(players.indexOf(roles[r]) + 1) % n] };
+      sendLobby();
+      renderLobby();
+    };
+    return b;
+  }));
   show('btnStart', isHost);
-  $('roleLegs').className = hostRole === 'legs' ? 'on' : 'alt';
-  $('roleArms').className = hostRole === 'arms' ? 'on' : 'alt';
-  ($('btnStart') as HTMLButtonElement).disabled = !peerHere;
-  if (isHost) {
-    $('lobbyTitle').textContent = 'Share this room code';
-    $('lobbyStatus').textContent = peerHere ? 'Your partner is here! Pick who does what.' : 'Waiting for your partner to join…';
-  } else {
-    $('lobbyTitle').textContent = 'You joined room';
-    $('lobbyStatus').textContent = `You will be the ${otherRole(hostRole).toUpperCase()}. Waiting for the host to start…`;
+  ($('btnStart') as HTMLButtonElement).disabled = n < 2;
+  $('lobbyStatus').textContent = isHost
+    ? (n < 2 ? 'Waiting for players to join… (up to 4)' : `${n} players here. Tap a role to change who plays it.`)
+    : `${n} players here. Waiting for the host to start…`;
+}
+
+const sendLobby = () => net?.send({ k: 'lobby', roles, players });
+
+/** Host, in game: pause while a role has nobody playing it. */
+function updateWaiting() {
+  if (!host || !net) return;
+  const orphaned = ROLES.filter((r) => !players.includes(roles[r]));
+  host.waiting = orphaned.length > 0;
+  show('notice', host.waiting);
+  if (host.waiting) {
+    $('noticeText').textContent =
+      `Nobody is playing ${orphaned.map((r) => ROLE_NAME[r]).join(' + ')}. Paused. They can rejoin with code ${net.code}.`;
   }
 }
 
@@ -143,33 +198,34 @@ async function createRoom() {
   } catch (e) {
     return toMenu((e as Error).message);
   }
-  peerHere = false;
-  net.onPeerJoined = () => {
-    peerHere = true;
-    if (mode === 'host' && host) {
-      host.waiting = false;
-      show('notice', false);
-      net!.send({ k: 'start', hostRole });
+  players = [0];
+  roles = splitRoles(players);
+  net.onPeerJoined = (id) => {
+    players = [...players, id].sort();
+    if (mode === 'host') {
+      net!.send({ k: 'start', roles }, id);
+      updateWaiting();
     } else {
-      net!.send({ k: 'lobby', hostRole });
-      renderLobby(true);
+      roles = splitRoles(players);
+      sendLobby();
+      renderLobby();
     }
   };
-  net.onPeerLeft = () => {
-    peerHere = false;
-    if (mode === 'host' && host) {
-      host.waiting = true;
-      $('notice').textContent = `Your partner left. Paused. They can rejoin with code ${net!.code}.`;
-      show('notice', true);
+  net.onPeerLeft = (id) => {
+    players = players.filter((p) => p !== id);
+    if (mode === 'host') {
+      updateWaiting();
     } else {
-      renderLobby(true);
+      roles = splitRoles(players);
+      sendLobby();
+      renderLobby();
     }
   };
-  net.onPeerMsg = (m: PeerMsg) => {
-    if (m.k === 'input') host?.remoteInput(m.role, m.i);
+  net.onPeerMsg = (m: PeerMsg, from) => {
+    if (m.k === 'input' && roles[m.role] === from) host?.remoteInput(m.role, m.i);
   };
   net.onClose = () => toMenu('Lost connection to the game server.');
-  renderLobby(true);
+  renderLobby();
 }
 
 async function joinRoom() {
@@ -181,27 +237,45 @@ async function joinRoom() {
   } catch (e) {
     return toMenu((e as Error).message);
   }
+  players = [0, net.id];
+  roles = splitRoles(players);
   net.onPeerMsg = (m: PeerMsg) => {
-    if (m.k === 'lobby') { hostRole = m.hostRole; renderLobby(false); }
-    else if (m.k === 'start') { hostRole = m.hostRole; startGuest(otherRole(m.hostRole)); }
-    else if (m.k === 'snap') guest?.receive(m.s);
-    else if (m.k === 'restart') { guest?.clear(); view.reset(); show('results', false); resultsTimer = 0; }
+    if (m.k === 'lobby') {
+      roles = m.roles;
+      players = m.players;
+      if (mode === 'menu') renderLobby();
+    } else if (m.k === 'start') {
+      roles = m.roles;
+      if (mode === 'guest') useControls(); // roles were handed around mid-game
+      else startGuest();
+    } else if (m.k === 'snap') {
+      guest?.receive(m.s);
+    } else if (m.k === 'restart') {
+      guest?.clear();
+      view.reset();
+      show('results', false);
+      resultsTimer = 0;
+    }
   };
   net.onPeerLeft = () => toMenu('The host left the room.');
   net.onClose = () => toMenu('Lost connection to the game server.');
-  renderLobby(false);
+  renderLobby();
 }
 
 $('btnLocal').onclick = startLocal;
 $('btnCreate').onclick = createRoom;
 $('btnJoin').onclick = joinRoom;
 $('joinCode').onkeydown = (e) => { if (e.key === 'Enter') void joinRoom(); };
-$('roleLegs').onclick = () => { hostRole = 'legs'; net?.send({ k: 'lobby', hostRole }); renderLobby(true); };
-$('roleArms').onclick = () => { hostRole = 'arms'; net?.send({ k: 'lobby', hostRole }); renderLobby(true); };
 $('btnStart').onclick = startHosting;
 $('btnLeave').onclick = () => toMenu();
 $('btnMenu').onclick = () => toMenu();
 $('quit').onclick = () => toMenu();
+$('btnCarry').onclick = () => {
+  roles = reassign(roles, players);
+  net?.send({ k: 'start', roles });
+  useControls();
+  updateWaiting();
+};
 $('btnAgain').onclick = () => {
   host?.restart();
   view.reset();
@@ -214,11 +288,16 @@ $('btnAgain').onclick = () => {
 const fmtTime = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
 function rank(score: number) {
-  if (score >= 3600) return 'Legendary Mega-Beast';
-  if (score >= 2800) return 'Certified Giant Monster';
-  if (score >= 2000) return 'Wobbly But Proud';
-  if (score >= 1000) return 'Two Brains, Zero Coordination';
+  if (score >= 4600) return 'Legendary Mega-Beast';
+  if (score >= 3600) return 'Certified Giant Monster';
+  if (score >= 2600) return 'Wobbly But Proud';
+  if (score >= 1300) return 'Many Brains, Zero Coordination';
   return 'Lovable Disaster';
+}
+
+function cooldown(id: string, left: number) {
+  $(id).classList.toggle('ready', left === 0);
+  ($(id).querySelector('b') as HTMLElement).style.width = `${(1 - left) * 100}%`;
 }
 
 function updateHud(s: Snapshot, dt: number) {
@@ -226,6 +305,8 @@ function updateHud(s: Snapshot, dt: number) {
   $('time').textContent = fmtTime(time);
   $('starsHud').textContent = `★ ${stars}/${level.stars.length}`;
   $('fumblesHud').textContent = `Oops ${fumbles}`;
+  cooldown('abRoar', s.sp[0]);
+  cooldown('abStomp', s.sp[1]);
   const c = $('chaos');
   c.classList.toggle('hidden', !s.ch);
   if (s.ch) {
@@ -250,7 +331,10 @@ function updateHud(s: Snapshot, dt: number) {
 }
 
 // Dev-only handle for poking at the running game from the console.
-if (import.meta.env.DEV) (window as any).__game = { get host() { return host; }, get snap() { return lastSnap; } };
+if (import.meta.env.DEV) (window as any).__game = { get host() { return host; }, get snap() { return lastSnap; }, get roles() { return roles; },
+  /** Run n frames right now (the Browser pane stops animation frames while hidden). */
+  frames(n: number) { for (let i = 0; i < n; i++) { prev = performance.now() - 50; tick(performance.now(), true); } },
+};
 
 // --- main loop ---------------------------------------------------------------
 

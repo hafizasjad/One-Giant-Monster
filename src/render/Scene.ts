@@ -80,6 +80,22 @@ export class GameView {
         case 'hic': fx.popup(e.txt!, p); break;
         case 'pop': fx.burst(p, 10, [4, 2], 3, 2); break;
         case 'throw': fx.burst(p, 6, [4], 3, 1); break;
+        case 'roar':
+          fx.popup(e.txt!, p, 'big purple');
+          fx.ring([p[0], p[1] - 1.3, p[2]], 5, 9);
+          fx.ring([p[0], p[1] - 0.6, p[2]], 4, 6);
+          fx.shake(0.5);
+          break;
+        case 'stomp': {
+          const big = e.txt === 'STOMP!';
+          fx.popup(e.txt!, p, big ? 'big' : '');
+          fx.ring([p[0], p[1] + 0.1, p[2]], 0, big ? 5 : 2.5);
+          fx.burst(p, big ? 18 : 8, [6, 4], 6, 2);
+          fx.shake(big ? 0.6 : 0.2);
+          break;
+        }
+        case 'smash': fx.popup(e.txt!, p, 'big'); fx.burst(p, 70, [6, 4, 6], 10, 6); fx.shake(0.6); break;
+        case 'button': fx.popup(e.txt!, p, 'gold'); fx.burst(p, 20, [3, 0], 5, 5); break;
         case 'finish': fx.popup(e.txt!, p, 'big gold'); this.confetti = 4; fx.shake(0.4); break;
       }
     }
@@ -97,11 +113,12 @@ export class GameView {
     }
     this.effects.update(dt);
 
-    // Follow camera, behind and above, looking down the course.
+    // Follow camera, behind and above, swinging a little with the head's gaze.
     const y = Math.max(my, -2);
     const k = Math.min(1, dt * 5);
-    this.camPos.lerp(new THREE.Vector3(mx * 0.55, y + 8.5, mz + 13.5), k);
-    this.camLook.lerp(new THREE.Vector3(mx * 0.8, y + 0.6, mz - 3.5), k);
+    const gaze = s.g[0], swing = gaze * 0.35;
+    this.camPos.lerp(new THREE.Vector3(mx * 0.55 - Math.sin(swing) * 13.5, y + 8.5, mz + Math.cos(swing) * 13.5), k);
+    this.camLook.lerp(new THREE.Vector3(mx * 0.8 + Math.sin(gaze) * 3.5, y + 0.6, mz - Math.cos(gaze) * 3.5), k);
     const sh = this.effects.shakeAmount;
     this.camera.position.copy(this.camPos).add(new THREE.Vector3((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, 0));
     this.camera.lookAt(this.camLook);

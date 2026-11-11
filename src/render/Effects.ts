@@ -15,6 +15,8 @@ export class Effects {
   private pool: Particle[] = [];
   private mats = COLORS.map((c) => new THREE.MeshBasicMaterial({ color: c }));
   private geo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+  private rings: { mesh: THREE.Mesh; life: number; r: number }[] = [];
+  private ringGeo = new THREE.RingGeometry(0.86, 1, 40);
   private popups: { el: HTMLElement; pos: THREE.Vector3; life: number }[] = [];
   shakeAmount = 0;
 
@@ -39,6 +41,21 @@ export class Effects {
     }
   }
 
+  /** A flat ring that grows to radius r and fades (shockwaves). */
+  ring(p: number[], color: number, r: number) {
+    const mat = new THREE.MeshBasicMaterial({ color: COLORS[color], transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(this.ringGeo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(p[0], p[1], p[2]);
+    this.scene.add(mesh);
+    this.rings.push({ mesh, life: 0.5, r });
+  }
+
+  private dropRing(mesh: THREE.Mesh) {
+    this.scene.remove(mesh);
+    (mesh.material as THREE.Material).dispose();
+  }
+
   popup(text: string, p: number[], cls = '') {
     const el = document.createElement('div');
     el.className = 'popup ' + cls;
@@ -56,6 +73,8 @@ export class Effects {
     for (const p of this.popups) p.el.remove();
     this.popups = [];
     for (const p of this.pool) { p.life = 0; p.mesh.visible = false; }
+    for (const r of this.rings) this.dropRing(r.mesh);
+    this.rings = [];
   }
 
   update(dt: number) {
@@ -69,6 +88,14 @@ export class Effects {
       p.mesh.scale.setScalar(Math.max(0.01, p.life / p.max) * 1.6);
       if (p.life <= 0) p.mesh.visible = false;
     }
+    this.rings = this.rings.filter((r) => {
+      r.life -= dt;
+      if (r.life <= 0) { this.dropRing(r.mesh); return false; }
+      const k = 1 - r.life / 0.5;
+      r.mesh.scale.setScalar(0.4 + k * r.r);
+      (r.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - k;
+      return true;
+    });
     const v = new THREE.Vector3();
     const w = this.overlay.clientWidth, h = this.overlay.clientHeight;
     this.popups = this.popups.filter((p) => {

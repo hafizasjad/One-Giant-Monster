@@ -63,6 +63,16 @@
     #power { bottom: 110px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; font-size: 15px; }
     #power i { display: block; width: 160px; height: 16px; border: 3px solid var(--ink); border-radius: 10px; overflow: hidden; background: #fff; }
     #power b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--yellow), var(--pink)); }
+    #notice button { pointer-events: auto; display: block; margin: 8px auto 0; font-size: 15px; padding: 4px 14px; box-shadow: 0 3px 0 var(--ink); }
+    #abilities { top: 66px; left: 14px; display: flex; gap: 12px; font-size: 13px; padding: 5px 10px; }
+    #abilities span { display: flex; align-items: center; gap: 6px; opacity: .55; }
+    #abilities span.ready { opacity: 1; }
+    #abilities i { display: block; width: 46px; height: 10px; border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; background: #fff; }
+    #abilities b { display: block; height: 100%; background: var(--purple); }
+    #abilities span.ready b { background: #58e06a; }
+    #roleList { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    #roleList button { font-size: 16px; padding: 8px 10px; }
+    #roleList button.fixed { pointer-events: none; box-shadow: 0 3px 0 var(--ink); }
     #notice { top: 45%; left: 50%; transform: translate(-50%, -50%); font-size: 22px; text-align: center; max-width: 90vw; }
     #help { bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 700; display: flex;
       gap: 22px; max-width: calc(100vw - 28px); flex-wrap: wrap; justify-content: center; }
@@ -76,6 +86,13 @@
     #touch.both .pad:first-child { right: 50%; }
     #touch.both .pad:last-child { left: 50%; }
     #touch .zone { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; pointer-events: auto; touch-action: none; }
+    #touch .zone.first { width: 34%; }
+    #touch .zone.second { left: 34%; width: 26%; }
+    #touch .zone.second .stick { left: 50%; }
+    #touch.both .zone.first .stick { left: 62px; }
+    #touch .stick::before { content: attr(data-label); position: absolute; left: 50%; top: -22px; transform: translateX(-50%);
+      font-weight: 900; font-size: 12px; letter-spacing: 1px; color: var(--ink); text-shadow: 0 0 4px #fff, 0 0 4px #fff; }
+    #touch .zone.look .stick i { background: var(--pink); }
     #touch .stick { position: absolute; left: calc(96px + env(safe-area-inset-left)); top: calc(100% - 96px - env(safe-area-inset-bottom));
       width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; pointer-events: none;
       background: rgba(255, 250, 240, .55); border: 4px solid var(--ink); opacity: .6; }
@@ -83,15 +100,16 @@
     #touch .stick i { position: absolute; inset: 26px; border-radius: 50%; background: var(--purple); border: 4px solid var(--ink); }
     #touch .btns { position: absolute; right: calc(16px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
       display: grid; grid-template-columns: repeat(2, auto); gap: 10px; pointer-events: auto; }
-    #touch .btns.one { grid-template-columns: auto; }
     #touch .tb { min-width: 86px; height: 68px; padding: 0 12px; display: grid; place-items: center; white-space: nowrap;
       font-weight: 900; font-size: 18px; background: var(--yellow); border: 4px solid var(--ink); border-radius: 20px;
       box-shadow: 0 5px 0 var(--ink); opacity: .92; touch-action: none; cursor: pointer; }
     #touch .tb.small { height: 46px; font-size: 15px; background: #fff; }
-    #touch .tb.big { width: 112px; height: 112px; border-radius: 50%; font-size: 22px; }
+    #touch .tb.alt { background: var(--purple); color: #fff; height: 56px; }
+    #touch .tb.big { width: 104px; height: 104px; border-radius: 50%; font-size: 22px; grid-column: 1 / -1; justify-self: center; }
     #touch .tb.down { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); background: var(--pink); color: #fff; }
     body.touch #help { display: none; }
     body.touch #power { bottom: auto; top: 118px; }
+    body.touch #abilities { top: 62px; }
     #rotate { display: none; top: 30%; left: 50%; transform: translateX(-50%); white-space: nowrap; }
     @media (orientation: portrait) { body.touch #rotate { display: block; } }
 
@@ -115,7 +133,8 @@
     <div id="who" class="chip"><span id="whoText"></span><button id="quit" class="alt">Menu</button></div>
     <div id="chaos" class="chip hidden"></div>
     <div id="power" class="chip hidden"><span>THROW POWER</span><i><b id="powerFill"></b></i></div>
-    <div id="notice" class="chip hidden"></div>
+    <div id="notice" class="chip hidden"><span id="noticeText"></span><button id="btnCarry" class="alt">Carry on without them</button></div>
+    <div id="abilities" class="chip"><span id="abRoar">ROAR<i><b></b></i></span><span id="abStomp">STOMP<i><b></b></i></span></div>
     <div id="help" class="chip"></div>
     <div id="rotate" class="chip">Turn your phone sideways ↻</div>
   </div>
@@ -124,7 +143,7 @@
   <div id="menu" class="screen">
     <div class="card">
       <h1>One Giant <span>Monster</span></h1>
-      <p>Two players. One wobbly monster. One of you is the <b>legs</b>, the other is the <b>arms</b>. Good luck.</p>
+      <p>Two to four players. One wobbly monster. You share its <b>legs</b>, <b>arms</b>, <b>head</b> and <b>special powers</b>. Good luck.</p>
       <div class="stack">
         <button id="btnLocal">Play on one device</button>
         <button id="btnCreate" class="alt">Create online room</button>
@@ -142,10 +161,7 @@
       <h2 id="lobbyTitle">Room code</h2>
       <div id="lobbyCode" class="code"></div>
       <p id="lobbyStatus"></p>
-      <div id="rolePick" class="row">
-        <button id="roleLegs" class="on">I'm the Legs</button>
-        <button id="roleArms" class="alt">I'm the Arms</button>
-      </div>
+      <div id="roleList"></div>
       <div class="stack">
         <button id="btnStart" disabled>Start!</button>
         <button id="btnLeave" class="alt">Back</button>

@@ -1,4 +1,4 @@
-import type { ArmsInput, LegsInput, Role } from '../../shared/protocol.ts';
+import type { ArmsInput, HeadInput, LegsInput, Role, SpecialInput } from '../../shared/protocol.ts';
 
 const STICK_R = 56; // px of travel for full deflection
 
@@ -21,13 +21,12 @@ class Stick {
   private id = -1;
   private ox = 0;
   private oy = 0;
-  private base: HTMLElement;
-  private knob: HTMLElement;
 
-  constructor(pad: HTMLElement, onUse: () => void) {
-    const zone = el('div', 'zone', pad);
-    this.base = el('div', 'stick', zone);
-    this.knob = el('i', '', this.base);
+  constructor(pad: HTMLElement, label: string, cls: string, onUse: () => void) {
+    const zone = el('div', `zone ${cls}`, pad);
+    const base = el('div', 'stick', zone);
+    base.dataset.label = label;
+    const knob = el('i', '', base);
     zone.addEventListener('pointerdown', (e) => {
       if (this.id !== -1) return;
       e.preventDefault();
@@ -37,9 +36,9 @@ class Stick {
       const r = zone.getBoundingClientRect();
       this.ox = e.clientX;
       this.oy = e.clientY;
-      this.base.style.left = `${e.clientX - r.left}px`;
-      this.base.style.top = `${e.clientY - r.top}px`;
-      this.base.classList.add('live');
+      base.style.left = `${e.clientX - r.left}px`;
+      base.style.top = `${e.clientY - r.top}px`;
+      base.classList.add('live');
     });
     zone.addEventListener('pointermove', (e) => {
       if (e.pointerId !== this.id) return;
@@ -48,121 +47,126 @@ class Stick {
       if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
       this.x = dx / STICK_R;
       this.y = dy / STICK_R;
-      this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
     });
-    const end = (e: PointerEvent) => { if (e.pointerId === this.id) this.reset(); };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== this.id) return;
+      this.id = -1;
+      this.x = this.y = 0;
+      knob.style.transform = '';
+      base.style.left = base.style.top = '';
+      base.classList.remove('live');
+    };
     zone.addEventListener('pointerup', end);
     zone.addEventListener('pointercancel', end);
-  }
-
-  reset() {
-    this.id = -1;
-    this.x = this.y = 0;
-    this.knob.style.transform = '';
-    this.base.style.left = this.base.style.top = '';
-    this.base.classList.remove('live');
   }
 }
 
 class HoldButton {
   on = false;
-  private node: HTMLElement;
 
   constructor(parent: HTMLElement, label: string, cls: string, onUse: () => void) {
-    this.node = el('div', `tb ${cls}`, parent, label);
-    this.node.addEventListener('pointerdown', (e) => {
+    const node = el('div', `tb ${cls}`, parent, label);
+    const set = (on: boolean) => {
+      this.on = on;
+      node.classList.toggle('down', on);
+    };
+    node.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       onUse();
-      capture(this.node, e.pointerId);
-      this.set(true);
+      capture(node, e.pointerId);
+      set(true);
     });
-    const up = () => this.set(false);
-    this.node.addEventListener('pointerup', up);
-    this.node.addEventListener('pointercancel', up);
-    this.node.addEventListener('contextmenu', (e) => e.preventDefault());
-  }
-
-  set(on: boolean) {
-    this.on = on;
-    this.node.classList.toggle('down', on);
+    node.addEventListener('pointerup', () => set(false));
+    node.addEventListener('pointercancel', () => set(false));
+    node.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 }
 
-/** On-screen controls: one pad per role, shown for the roles played on this device. */
+type ButtonName = 'jump' | 'grab' | 'throw' | 'near' | 'far' | 'roar' | 'stomp';
+
+/**
+ * On-screen controls. Each panel is one person's corner of the screen and holds the
+ * sticks and buttons for the roles played there.
+ */
 export class Touch {
   enabled: boolean;
   /** Forced on with ?touch=1 (for trying the controls with a mouse). */
   private forced: boolean;
-  private roles: Role[] | null = null;
-  private pads: Record<Role, HTMLElement>;
-  private legStick: Stick;
-  private armStick: Stick;
-  private jump: HoldButton;
-  private grab: HoldButton;
-  private throwB: HoldButton;
-  private near: HoldButton;
-  private far: HoldButton;
+  private panels: Role[][] | null = null;
+  private sticks: Partial<Record<'legs' | 'arms' | 'head', Stick>> = {};
+  private buttons: Partial<Record<ButtonName, HoldButton>> = {};
 
-  constructor(private root: HTMLElement, onUse: () => void) {
+  constructor(private root: HTMLElement, private onUse: () => void) {
     this.forced = new URLSearchParams(location.search).has('touch');
     this.enabled = this.forced || matchMedia('(pointer: coarse)').matches;
-
-    const legs = el('div', 'pad', root);
-    this.legStick = new Stick(legs, onUse);
-    const lb = el('div', 'btns one', legs);
-    this.jump = new HoldButton(lb, 'Jump', 'big', onUse);
-
-    const arms = el('div', 'pad', root);
-    this.armStick = new Stick(arms, onUse);
-    const ab = el('div', 'btns', arms);
-    this.near = new HoldButton(ab, '− Reach', 'small', onUse);
-    this.far = new HoldButton(ab, '+ Reach', 'small', onUse);
-    this.grab = new HoldButton(ab, 'Grab', '', onUse);
-    this.throwB = new HoldButton(ab, 'Throw', '', onUse);
-
-    this.pads = { legs, arms };
-    this.apply();
+    this.build();
   }
 
-  /** Which roles this device plays right now; null hides the controls (menus). */
-  show(roles: Role[] | null) {
-    this.roles = roles;
-    this.apply();
+  /** One list of roles per panel (one or two panels); null hides the controls (menus). */
+  show(panels: Role[][] | null) {
+    this.panels = panels && panels.length ? panels : null;
+    this.build();
   }
 
   setEnabled(on: boolean) {
     on = on || this.forced;
     if (on === this.enabled) return;
     this.enabled = on;
-    this.apply();
+    this.build();
   }
 
-  private apply() {
-    const visible = this.enabled && !!this.roles;
+  private build() {
+    const visible = this.enabled && !!this.panels;
     document.body.classList.toggle('touch', this.enabled);
     this.root.classList.toggle('hidden', !visible);
-    this.root.classList.toggle('both', this.roles?.length === 2);
-    for (const role of ['legs', 'arms'] as Role[]) {
-      this.pads[role].classList.toggle('hidden', !this.roles?.includes(role));
+    this.root.replaceChildren();
+    this.sticks = {};
+    this.buttons = {};
+    if (!visible) return;
+    this.root.classList.toggle('both', this.panels!.length === 2);
+
+    for (const roles of this.panels!) {
+      const pad = el('div', 'pad', this.root);
+      const has = (r: Role) => roles.includes(r);
+      const move = has('legs') ? 'legs' : has('arms') ? 'arms' : null;
+      if (move) this.sticks[move] = new Stick(pad, move === 'legs' ? 'MOVE' : 'HAND', has('head') ? 'first' : 'wide', this.onUse);
+      if (has('head')) this.sticks.head = new Stick(pad, 'LOOK', move ? 'second look' : 'wide look', this.onUse);
+
+      const b = el('div', 'btns', pad);
+      const add = (name: ButtonName, label: string, cls = '') => { this.buttons[name] = new HoldButton(b, label, cls, this.onUse); };
+      if (has('special')) { add('roar', 'Roar', 'alt'); add('stomp', 'Stomp', 'alt'); }
+      if (has('arms')) { add('near', '− Reach', 'small'); add('far', '+ Reach', 'small'); add('grab', 'Grab'); add('throw', 'Throw'); }
+      if (has('legs')) add('jump', 'Jump', 'big');
     }
-    if (!visible) {
-      this.legStick.reset();
-      this.armStick.reset();
-      for (const b of [this.jump, this.grab, this.throwB, this.near, this.far]) b.set(false);
-    }
+  }
+
+  private on(name: ButtonName) {
+    return !!this.buttons[name]?.on;
   }
 
   legs(): LegsInput {
-    return { mx: this.legStick.x, mz: this.legStick.y, jump: this.jump.on };
+    const s = this.sticks.legs;
+    return { mx: s?.x ?? 0, mz: s?.y ?? 0, jump: this.on('jump') };
   }
 
   arms(): ArmsInput {
+    const s = this.sticks.arms;
     return {
-      ax: this.armStick.x,
-      ay: -this.armStick.y + 0,
-      reach: (this.far.on ? 1 : 0) - (this.near.on ? 1 : 0),
-      grab: this.grab.on,
-      throw: this.throwB.on,
+      ax: s?.x ?? 0,
+      ay: -(s?.y ?? 0) + 0,
+      reach: (this.on('far') ? 1 : 0) - (this.on('near') ? 1 : 0),
+      grab: this.on('grab'),
+      throw: this.on('throw'),
     };
+  }
+
+  head(): HeadInput {
+    const s = this.sticks.head;
+    return { lx: s?.x ?? 0, ly: -(s?.y ?? 0) + 0 };
+  }
+
+  special(): SpecialInput {
+    return { roar: this.on('roar'), stomp: this.on('stomp') };
   }
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Snapshot } from '../../shared/protocol.ts';
+import { GAZE_RADIUS } from '../game/Head.ts';
 
 const BODY = 0x7c5cff, BELLY = 0xcbbcff, PAW = 0xffb14e, HORN = 0xfff1c1;
 const ARM_SEGMENTS = 9;
@@ -18,6 +19,9 @@ export class MonsterView {
   private jaw: THREE.Mesh;
   private armBalls: THREE.Mesh[][] = [[], []];
   private hands: THREE.Mesh[] = [];
+  private spotDisc: THREE.Mesh;
+  private spotRing: THREE.Mesh;
+  private beam: THREE.Mesh;
   private walk = 0;
   private squash = 0; // spring displacement
   private squashV = 0;
@@ -94,6 +98,15 @@ export class MonsterView {
       this.hands.push(hand);
       this.arms.add(hand);
     }
+    // Where the head is looking: a spot on the ground and a faint beam from the eyes.
+    const glow = (opacity: number) =>
+      new THREE.MeshBasicMaterial({ color: 0xfff3a0, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+    this.spotDisc = new THREE.Mesh(new THREE.CircleGeometry(GAZE_RADIUS, 40), glow(0.16));
+    this.spotRing = new THREE.Mesh(new THREE.RingGeometry(GAZE_RADIUS - 0.14, GAZE_RADIUS, 48), glow(0.8));
+    this.spotDisc.rotation.x = this.spotRing.rotation.x = -Math.PI / 2;
+    this.beam = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 24, 1, true), glow(0.07));
+    this.arms.add(this.spotDisc, this.spotRing, this.beam);
+
     this.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
   }
 
@@ -128,18 +141,29 @@ export class MonsterView {
     this.torso.rotation.x = k * 0.16 - charge * 0.3;
     this.torso.rotation.z = Math.sin(this.walk) * 0.07 * k;
 
-    // Eyes follow the hand; blink now and then; mouth gapes when airborne or charging.
+    // Eyes follow the gaze spot; blink now and then; mouth gapes when airborne, charging or roaring.
     this.root.updateMatrixWorld(true);
-    const handLocal = this.root.worldToLocal(new THREE.Vector3(hx, hy, hz));
-    const lx = Math.max(-1, Math.min(1, handLocal.x / 1.6));
-    const ly = Math.max(-1, Math.min(1, (handLocal.y - 2.2) / 1.6));
+    const [gyaw, gdist, gy] = s.g;
+    const spot = new THREE.Vector3(x + Math.sin(gyaw) * gdist, gy + 0.06, z - Math.cos(gyaw) * gdist);
+    const spotLocal = this.root.worldToLocal(spot.clone());
+    const lx = Math.max(-1, Math.min(1, spotLocal.x / 4));
+    const ly = Math.max(-1, Math.min(0.6, gdist / 10 - 0.9));
+    this.spotDisc.position.copy(spot);
+    this.spotRing.position.copy(spot);
+    this.spotRing.rotation.z = time * 0.8;
+    const eyes = new THREE.Vector3(0, 2.3 * sy, 0.7).applyMatrix4(this.root.matrixWorld);
+    const up = eyes.clone().sub(spot);
+    const len = up.length();
+    this.beam.position.copy(spot).addScaledVector(up, 0.5);
+    this.beam.scale.set(GAZE_RADIUS * 0.9, len, GAZE_RADIUS * 0.9);
+    this.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up.normalize());
     this.blink -= dt;
     if (this.blink < -0.12) this.blink = 1.5 + Math.random() * 3;
     for (const [i, p] of this.pupils.entries()) {
       p.position.set(lx * 0.13, ly * 0.13 + Math.sin(time * 9 + i) * 0.01 * (1 + k * 3), 0.25);
       this.eyes[i].scale.y = this.blink < 0 ? 0.1 : 1;
     }
-    const open = Math.max(grounded ? 0 : 0.6, charge, held >= 0 ? 0.25 : 0);
+    const open = Math.max(grounded ? 0 : 0.6, charge, held >= 0 ? 0.25 : 0, s.sp[0] > 0.8 ? 1.3 : 0);
     this.jaw.scale.y = 0.2 + open * 0.55;
 
     // Noodle arms: a sagging curve of beads from each shoulder to the hand.
