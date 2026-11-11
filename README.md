@@ -29,6 +29,32 @@ npm start
 
 Then open http://localhost:3001 (set `PORT` to change it).
 
+## Deploy on Render
+
+The room server also serves the built game, so one Render web service runs everything.
+
+1. Push the project to a GitHub repository.
+2. In the Render dashboard choose **New → Web Service** and connect the repository.
+3. Use these settings:
+
+   | Setting | Value |
+   |---|---|
+   | Language | Node |
+   | Branch | `main` |
+   | Build command | `npm install --include=dev && npm run build` |
+   | Start command | `npm start` |
+   | Environment variable | `NODE_VERSION` = `24` |
+
+4. Create the service. When the deploy shows as live, share the `https://<name>.onrender.com` address; one player creates a room and the others join with the code.
+
+Notes:
+
+- `--include=dev` is needed because Vite and TypeScript are dev dependencies.
+- `NODE_VERSION` is needed because the server runs its TypeScript file directly, which needs Node 22.18 or newer.
+- Render sets `PORT` itself; the server reads it.
+- Every push to `main` redeploys. A redeploy or restart closes open rooms, and everyone must reload the page to get the new version.
+- On the free plan the service sleeps after about 15 minutes without visitors and takes up to a minute to wake.
+
 ## Controls
 
 | | Online, your own keyboard | Everyone on one keyboard | Controller |
