@@ -72,6 +72,15 @@ export class Monster {
     this.body.setNextKinematicTranslation(this.pos);
   }
 
+  /** Ride along with the platform underfoot. */
+  carry(dx: number, dy: number, dz: number) {
+    this.pos.x += dx;
+    this.pos.y += dy;
+    this.pos.z += dz;
+    this.body.setTranslation(this.pos, true);
+    this.body.setNextKinematicTranslation(this.pos);
+  }
+
   knock(x: number, y: number, z: number) {
     this.kb.x += x;
     this.kb.z += z;

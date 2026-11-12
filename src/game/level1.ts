@@ -10,7 +10,7 @@ export interface EntityDef {
   pos: V3;
   body: BodyKind;
   color: number;
-  tag: string; // ground, ice, wall, crate, ball, boulder, door, bridge, drawbridge, hammer
+  tag: string; // ground, ice, mover, wall, crate, ball, boulder, door, bridge, drawbridge, hammer
   density?: number;
   restitution?: number;
   friction?: number;
@@ -30,7 +30,7 @@ export interface LevelDef {
   movable: number[]; // entity indices that are not fixed, in snapshot order
   spawn: V3;
   checkpoints: { z: number; pos: V3 }[];
-  /** Pull one to sink its door into the floor. */
+  /** Pull one to sink its door into the floor (door -1: no door, the lever drives a mover instead). */
   levers: { pos: V3; door: number; closedY: number; openY: number }[];
   /** While something sits on one, its bridge slides out. */
   plates: { pos: V3; half: number; bridge: number; zIn: number; zOut: number }[];
@@ -39,12 +39,20 @@ export interface LevelDef {
   hammers: HammerDef[];
   /** Boulders roll from z towards the start while the monster is between `from` and `to`. */
   boulders: { ids: number[]; z: number; y: number; speed: number; interval: number; from: number; to: number }[];
+  /**
+   * Moving platforms. Without a lever they glide a -> b -> a forever, taking `period` seconds
+   * per round trip. With a lever they travel to b while it is on (in `period` seconds) and back
+   * when it is off; `returns` switches the lever off again once the platform has sat empty at b.
+   */
+  movers: { id: number; a: V3; b: V3; period: number; phase?: number; lever?: number; returns?: boolean }[];
   /** Free-standing floating signs. */
   signs: { text: string; pos: V3; color?: string }[];
   /** Score for finishing instantly; 10 points are lost per second. */
   timeBonus: number;
   stars: V3[];
   finishZ: number;
+  /** Height of the floor at the finish line (default 0). */
+  finishY?: number;
   killY: number;
 }
 
@@ -123,6 +131,7 @@ export function buildLevel(): LevelDef {
     plates: [{ pos: [-3, 0, -30], half: 1.3, bridge, zIn: -31.4, zOut: -36.5 }],
     targets: [{ pos: [3.8, 3.2, -87.5], r: 1.6, bridge: drawbridge, hinge, halfLen: 4, strandedZ: -79 }],
     hammers,
+    movers: [],
     boulders: [{ ids: boulderIds, z: -65, y: 1.2, speed: 8, interval: 3.2, from: -41, to: -70 }],
     signs: [{ text: 'THROW A BALL', pos: [-3.6, 2.4, -74.5], color: '#7c5cff' }],
     timeBonus: 3000,

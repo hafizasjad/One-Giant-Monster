@@ -78,6 +78,7 @@ export function buildLevel3(): LevelDef {
     targets: [{ pos: [3.8, 3.2, -121.5], r: 1.6, bridge: drawbridge, hinge: [0, -0.2, -120], halfLen: 4, strandedZ: -113 }],
     hammers: [],
     boulders: [],
+    movers: [],
     signs: [
       { text: 'SLIPPERY!', pos: [0, 3.4, -5], color: '#2b8fd6' },
       { text: 'SLIDE IT IN', pos: [0, 3.9, -86], color: '#2bb3c0' },

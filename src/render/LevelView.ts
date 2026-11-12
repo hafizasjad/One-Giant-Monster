@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Snapshot } from '../../shared/protocol.ts';
-import type { EntityDef, LevelDef } from '../game/level1.ts';
+import { MONSTER_Y, type EntityDef, type LevelDef } from '../game/level1.ts';
 
 function canvasTexture(size: number, draw: (g: CanvasRenderingContext2D, s: number) => void) {
   const c = document.createElement('canvas');
@@ -165,9 +165,10 @@ export class LevelView {
     // Checkpoint flags
     for (const cp of L.checkpoints) {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3, 8), std(0xffffff));
-      pole.position.set(-4.6, 1.5, cp.z);
+      const floorY = cp.pos[1] - MONSTER_Y;
+      pole.position.set(-4.6, floorY + 1.5, cp.z);
       const flag = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.06), std(0xbbbbbb));
-      flag.position.set(-4.0, 2.6, cp.z);
+      flag.position.set(-4.0, floorY + 2.6, cp.z);
       this.flags.push(flag);
       this.group.add(pole, flag);
     }
@@ -179,15 +180,16 @@ export class LevelView {
     });
     finishTex.wrapS = finishTex.wrapT = THREE.RepeatWrapping;
     finishTex.repeat.set(9, 1);
+    const finishY = L.finishY ?? 0;
     for (const sx of [-1, 1]) {
       const p = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 6, 12), std(0xff5d8f));
-      p.position.set(sx * 4.6, 3, L.finishZ);
+      p.position.set(sx * 4.6, finishY + 3, L.finishZ);
       this.group.add(p);
     }
     const banner = new THREE.Mesh(new THREE.BoxGeometry(9.6, 1.1, 0.2), new THREE.MeshStandardMaterial({ map: finishTex }));
-    banner.position.set(0, 5.6, L.finishZ);
+    banner.position.set(0, finishY + 5.6, L.finishZ);
     const line = new THREE.Mesh(new THREE.BoxGeometry(10, 0.04, 1), new THREE.MeshStandardMaterial({ map: finishTex }));
-    line.position.set(0, 0.02, L.finishZ);
+    line.position.set(0, finishY + 0.02, L.finishZ);
     this.group.add(banner, line);
 
     // Clouds drifting below the course

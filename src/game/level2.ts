@@ -73,6 +73,7 @@ export function buildLevel2(): LevelDef {
       { pos: [3.8, 4.2, -103.5], r: 1.6, bridge: draw2, hinge: [0, -0.2, -102], halfLen: 4, strandedZ: -95 },
     ],
     hammers,
+    movers: [],
     boulders: [{ ids: boulderIds, z: -59, y: 1.2, speed: 8, interval: 2.8, from: -39, to: -60 }],
     signs: [
       { text: 'BRING A BOX!', pos: [0, 4.6, -1], color: '#2bb3c0' },

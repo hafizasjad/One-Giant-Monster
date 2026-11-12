@@ -1,6 +1,7 @@
 import { buildLevel as wobbleWay, type LevelDef } from './level1.ts';
 import { buildLevel2 as doubleTrouble } from './level2.ts';
 import { buildLevel3 as frozenFlop } from './level3.ts';
+import { buildLevel4 as liftOff } from './level4.ts';
 
 export interface LevelInfo {
   /** Stable id: best scores are saved under it. */
@@ -14,4 +15,5 @@ export const LEVELS: LevelInfo[] = [
   { id: 'wobble-way', name: 'Wobble Way', build: wobbleWay },
   { id: 'double-trouble', name: 'Double Trouble', build: doubleTrouble },
   { id: 'frozen-flop', name: 'Frozen Flop', build: frozenFlop },
+  { id: 'lift-off', name: 'Lift Off', build: liftOff },
 ];

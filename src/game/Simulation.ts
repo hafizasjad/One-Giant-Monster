@@ -54,6 +54,8 @@ export class Simulation {
   private hitCooldown = 0;
   private boulderTimer: number[];
   private boulderNext: number[];
+  private moverS: number[]; // 0 at a .. 1 at b
+  private moverIdle: number[];
   private farTimers = new Map<number, number>();
   private include: (c: Collider) => boolean;
 
@@ -91,6 +93,8 @@ export class Simulation {
     this.drawAngle = L.targets.map(() => Math.PI / 2);
     this.boulderTimer = L.boulders.map(() => 1);
     this.boulderNext = L.boulders.map(() => 0);
+    this.moverS = L.movers.map(() => 0);
+    this.moverIdle = L.movers.map(() => 0);
     this.monster = new Monster(R, this.world, this.level.spawn);
     this.arms = new Arms(R, this.world, this.monster);
     this.chaos = new Chaos(opts.seed ?? 12345, opts.chaos ?? true);
@@ -172,9 +176,11 @@ export class Simulation {
 
   private moveMachines(dt: number) {
     const L = this.level;
+    this.moveMovers(dt);
 
     // Doors sink into the floor when their lever is on.
     L.levers.forEach((lv, i) => {
+      if (lv.door < 0) return;
       const target = this.levers[i] ? lv.openY : lv.closedY;
       if (this.doorY[i] === target) return;
       this.doorY[i] = approach(this.doorY[i], target, 4 * dt);
@@ -203,6 +209,37 @@ export class Simulation {
       const p = this.hammerPos(h, this.time);
       this.bodies[h.head].setNextKinematicTranslation(p);
     }
+  }
+
+  /** Glide the moving platforms and carry the monster if it is standing on one. */
+  private moveMovers(dt: number) {
+    const L = this.level, m = this.monster;
+    L.movers.forEach((mv, i) => {
+      const body = this.bodies[mv.id], e = L.entities[mv.id], old = body.translation();
+      const riding = m.grounded
+        && Math.abs(m.pos.x - old.x) < e.half[0] + 0.2 && Math.abs(m.pos.z - old.z) < e.half[2] + 0.2
+        && Math.abs(m.feetY - (old.y + e.half[1])) < 0.35;
+
+      let s: number;
+      if (mv.lever === undefined) {
+        s = 0.5 - 0.5 * Math.cos((this.time / mv.period) * Math.PI * 2 + (mv.phase ?? 0));
+      } else {
+        s = approach(this.moverS[i], this.levers[mv.lever] ? 1 : 0, dt / mv.period);
+        // A lift left empty at the top goes back down by itself, so it can always be called again.
+        this.moverIdle[i] = mv.returns && s === 1 && !riding ? this.moverIdle[i] + dt : 0;
+        if (this.moverIdle[i] > 1.5) {
+          this.levers[mv.lever] = false;
+          this.emit('lever', toP(L.levers[mv.lever].pos), 'clonk.');
+        }
+      }
+      this.moverS[i] = s;
+
+      const p = { x: mv.a[0] + (mv.b[0] - mv.a[0]) * s, y: mv.a[1] + (mv.b[1] - mv.a[1]) * s, z: mv.a[2] + (mv.b[2] - mv.a[2]) * s };
+      const dx = p.x - old.x, dy = p.y - old.y, dz = p.z - old.z;
+      if (!dx && !dy && !dz) return;
+      body.setTranslation(p, true);
+      if (riding) m.carry(dx, dy, dz);
+    });
   }
 
   private hammerPos(h: LevelDef['hammers'][number], t: number): P {

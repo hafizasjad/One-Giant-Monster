@@ -4,6 +4,7 @@ import { emptyInputs, type Inputs } from '../shared/protocol.ts';
 import { buildLevel, MONSTER_Y } from '../src/game/level1.ts';
 import { buildLevel2 } from '../src/game/level2.ts';
 import { buildLevel3 } from '../src/game/level3.ts';
+import { buildLevel4 } from '../src/game/level4.ts';
 import { LEVELS } from '../src/game/levels.ts';
 import { Simulation } from '../src/game/Simulation.ts';
 
@@ -417,6 +418,98 @@ describe('level 3: Frozen Flop', () => {
       hit = frames;
       run(sim, 200);
       steer(sim, 0, -110);
+      run(sim, 400, (i) => { i.legs.mz = sim.finished ? 0 : -1; i.legs.mx = -sim.monster.pos.x; });
+      expect(sim.finished).toBe(true);
+      expect(sim.fumbles).toBe(0);
+    }
+    expect(hit, 'some throw strength hits the target').toBeGreaterThan(0);
+  });
+});
+
+describe('level 4: Lift Off', () => {
+  const make4 = () => new Simulation(RAPIER, { chaos: false, level: buildLevel4() });
+  const moverPos = (sim: Simulation, n: number) => sim.bodies[sim.level.movers[n].id].translation();
+  /** Step until a condition holds. */
+  function until(sim: Simulation, cond: () => boolean, edit?: (i: Inputs) => void, max = 900) {
+    for (let n = 0; n < max && !cond(); n++) run(sim, 1, edit);
+    return cond();
+  }
+
+  it('the ferry carries a standing monster across the first gap', () => {
+    const sim = make4();
+    sim.monster.teleport([0, MONSTER_Y, -8]);
+    run(sim, 20);
+    expect(until(sim, () => moverPos(sim, 0).z > -12.7)).toBe(true); // ferry at the near side
+    run(sim, 25, (i) => { i.legs.mz = -1; });                          // step on
+    const z0 = sim.monster.pos.z;
+    expect(until(sim, () => moverPos(sim, 0).z < -19.3)).toBe(true);  // ride without touching anything
+    expect(sim.monster.pos.z).toBeLessThan(z0 - 6);
+    expect(sim.monster.grounded).toBe(true);
+    run(sim, 90, (i) => { i.legs.mz = -1; });                          // step off
+    expect(sim.monster.pos.z).toBeLessThan(-22);
+    expect(sim.fumbles).toBe(0);
+    expect(sim.cp).toBe(0);
+  });
+
+  it('the sideways platforms can be crossed by stepping over when they line up', () => {
+    const sim = make4();
+    sim.monster.teleport([0, MONSTER_Y, -32.5]);
+    run(sim, 20);
+    for (const n of [1, 2, 3]) {
+      // wait until the next platform is straight ahead, then walk onto its middle
+      expect(until(sim, () => Math.abs(moverPos(sim, n).x - sim.monster.pos.x) < 0.5)).toBe(true);
+      const z = sim.level.movers[n].a[2];
+      until(sim, () => sim.monster.pos.z < z, (i) => { i.legs.mz = -1; }, 60);
+      run(sim, 6);
+    }
+    const x0 = sim.monster.pos.x;
+    run(sim, 40);
+    expect(Math.abs(sim.monster.pos.x - x0)).toBeGreaterThan(0.5); // carried sideways
+    until(sim, () => Math.abs(sim.monster.pos.x) < 3, undefined, 300);
+    run(sim, 60, (i) => { i.legs.mz = -1; });
+    expect(sim.monster.pos.z).toBeLessThan(-49.5);
+    expect(sim.fumbles).toBe(0);
+    expect(sim.cp).toBe(1);
+  });
+
+  it('pulling the lever from the lift takes the monster to the top deck, and the lift comes back down', () => {
+    const sim = make4();
+    sim.monster.teleport([1, MONSTER_Y, -63.6]);
+    run(sim, 20);
+    run(sim, 60, (i) => { i.arms.ay = 1; i.arms.ax = 1; });
+    tapGrab(sim);
+    expect(sim.levers[0]).toBe(true);
+    run(sim, 180);
+    expect(sim.monster.pos.y).toBeCloseTo(5 + MONSTER_Y, 0);
+    expect(sim.monster.grounded).toBe(true);
+    run(sim, 90, (i) => { i.legs.mz = -1; });
+    expect(sim.monster.pos.z).toBeLessThan(-67.5);
+    expect(sim.monster.pos.y).toBeGreaterThan(6);
+    expect(sim.cp).toBe(2);
+    run(sim, 400); // left empty at the top: goes back down
+    expect(sim.levers[0]).toBe(false);
+    expect(moverPos(sim, 4).y).toBeCloseTo(-0.2, 1);
+    expect(sim.fumbles).toBe(0);
+  });
+
+  it('a throw from the top deck hits the target, and the drawbridge leads to the finish', () => {
+    let hit = -1;
+    for (let frames = 12; frames <= 54 && hit < 0; frames += 3) {
+      const sim = make4();
+      const tg = sim.level.targets[0];
+      const ball = sim.level.entities.findIndex((e) => e.tag === 'ball');
+      sim.monster.teleport([tg.pos[0], 5 + MONSTER_Y, -77.5]);
+      run(sim, 10);
+      run(sim, 40, (i) => { i.legs.mz = -0.6; });
+      const h = sim.arms.pos;
+      sim.bodies[ball].setTranslation({ x: h.x, y: h.y, z: h.z }, true);
+      tapGrab(sim);
+      run(sim, frames, (i) => { i.arms.throw = true; });
+      run(sim, 120);
+      if (!sim.targets[0]) continue;
+      hit = frames;
+      run(sim, 200);
+      run(sim, 60, (i) => { i.legs.mx = -1; });
       run(sim, 400, (i) => { i.legs.mz = sim.finished ? 0 : -1; i.legs.mx = -sim.monster.pos.x; });
       expect(sim.finished).toBe(true);
       expect(sim.fumbles).toBe(0);
