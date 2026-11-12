@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { emptyInputs, otherRole, type PeerMsg, type Role, type Snapshot } from '../shared/protocol.ts';
 import { Sfx } from './audio/Sfx.ts';
 import { CHAOS_LABEL } from './game/Chaos.ts';
-import { loadBest, saveBest } from './best.ts';
+import { isUnlocked, loadBest, saveBest } from './best.ts';
 import { LEVELS } from './game/levels.ts';
 import { Input } from './input/Input.ts';
 import { GuestSession } from './net/GuestSession.ts';
@@ -142,10 +142,21 @@ function startGuest(role: Role, levelIdx: number) {
 function showLevels() {
   show('menu', false);
   show('levels', true);
+  const got = LEVELS.reduce((n, l) => n + (loadBest(l.id)?.stars ?? 0), 0);
+  $('starTotal').textContent = `★ ${got} / ${STAR_TOTALS.reduce((a, b) => a + b, 0)} stars collected`;
   $('levelList').replaceChildren(...LEVELS.map((info, i) => {
     const b = document.createElement('button');
     if (i > 0) b.className = 'alt';
     const best = loadBest(info.id);
+    if (!isUnlocked(LEVELS, i)) {
+      b.disabled = true;
+      const title = document.createElement('span');
+      title.textContent = `🔒 ${i + 1}. ${info.name}`;
+      const hint = document.createElement('small');
+      hint.textContent = `Finish ${LEVELS[i - 1].name} to unlock`;
+      b.append(title, hint);
+      return b;
+    }
     const title = document.createElement('span');
     title.textContent = `${i + 1}. ${info.name}`;
     const record = document.createElement('small');
@@ -170,7 +181,7 @@ function renderLobby(isHost: boolean) {
   const pick = $('lobbyLevel') as HTMLButtonElement;
   pick.textContent = `Level: ${LEVELS[lobbyLevel].name}`;
   // Only the host chooses, and only when there is something to choose between.
-  pick.classList.toggle('fixed', !isHost || LEVELS.length < 2);
+  pick.classList.toggle('fixed', !isHost || !isUnlocked(LEVELS, 1));
   if (isHost) {
     $('lobbyTitle').textContent = 'Share this room code';
     $('lobbyStatus').textContent = peerHere ? 'Your partner is here! Pick who does what.' : 'Waiting for your partner to join…';
@@ -242,7 +253,8 @@ async function joinRoom() {
 $('btnSolo').onclick = showLevels;
 $('btnLevelsBack').onclick = () => toMenu();
 $('lobbyLevel').onclick = () => {
-  lobbyLevel = (lobbyLevel + 1) % LEVELS.length;
+  // Cycle through the levels this player has opened.
+  lobbyLevel = lobbyLevel + 1 < LEVELS.length && isUnlocked(LEVELS, lobbyLevel + 1) ? lobbyLevel + 1 : 0;
   sendLobby();
   renderLobby(true);
 };
@@ -260,6 +272,13 @@ $('btnAgain').onclick = () => {
   view.reset();
   resultsTimer = 0;
   show('results', false);
+};
+
+$('btnNext').onclick = () => {
+  const next = levelIndex + 1;
+  if (next >= LEVELS.length) return;
+  if (mode === 'host') { lobbyLevel = next; startHosting(); }
+  else startLocal(next);
 };
 
 // --- HUD + results ------------------------------------------------------------
@@ -300,6 +319,8 @@ function updateHud(s: Snapshot, dt: number) {
       const isBest = saveBest(id, { score: final, stars, time });
       $('resBest').textContent = isBest ? 'New best!' : `Your best: ${loadBest(id)?.score ?? final}`;
       show('btnAgain', mode !== 'guest');
+      show('btnNext', mode !== 'guest' && levelIndex + 1 < LEVELS.length);
+      $('btnAgain').className = levelIndex + 1 < LEVELS.length ? 'alt' : '';
       show('resWait', mode === 'guest');
       show('results', true);
     }

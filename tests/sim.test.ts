@@ -451,7 +451,7 @@ describe('level 4: Lift Off', () => {
     expect(sim.cp).toBe(0);
   });
 
-  it('the sideways platforms can be crossed by stepping over when they line up', () => {
+  it('the sideways platforms can be crossed by hopping over when they line up', () => {
     const sim = make4();
     sim.monster.teleport([0, MONSTER_Y, -32.5]);
     run(sim, 20);
@@ -459,7 +459,12 @@ describe('level 4: Lift Off', () => {
       // wait until the next platform is straight ahead, then walk onto its middle
       expect(until(sim, () => Math.abs(moverPos(sim, n).x - sim.monster.pos.x) < 0.5)).toBe(true);
       const z = sim.level.movers[n].a[2];
-      until(sim, () => sim.monster.pos.z < z, (i) => { i.legs.mz = -1; }, 60);
+      // hop the gap, steering to stay over the platform as it slides
+      until(sim, () => sim.monster.pos.z < z, (i) => {
+        i.legs.mz = -1;
+        i.legs.mx = Math.max(-1, Math.min(1, moverPos(sim, n).x - sim.monster.pos.x));
+        i.legs.jump = sim.monster.pos.z < z + 3.2 && sim.monster.pos.z > z + 2.6;
+      }, 90);
       run(sim, 6);
     }
     const x0 = sim.monster.pos.x;

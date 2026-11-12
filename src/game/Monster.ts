@@ -8,7 +8,7 @@ export const MONSTER_HALF = 0.6; // capsule half height (segment)
 const SPEED = 6.2;
 const JUMP = 9.2;
 export const GRAVITY = 20;
-const ICE_ACCEL = 2.5; // how quickly the legs change the monster's speed on ice (normal ground: 14)
+const ICE_ACCEL = 1.8; // how quickly the legs change the monster's speed on ice (normal ground: 14)
 
 export interface MonsterHooks {
   onJump(): void;

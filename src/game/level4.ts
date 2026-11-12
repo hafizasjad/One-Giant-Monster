@@ -23,12 +23,12 @@ export function buildLevel4(): LevelDef {
 
   // --- 1. A ferry across the first gap ---------------------------------------
   ground(8, -10, 0xb7e3a0);
-  mover([2, 0.2, 2.5], [0, -0.2, -12.5], [0, -0.2, -19.5], 6);
+  mover([1.5, 0.2, 2.5], [0, -0.2, -12.5], [0, -0.2, -19.5], 6);
 
-  // --- 2. Three platforms sliding sideways, out of step with each other ---------
+  // --- 2. Three small platforms sliding sideways, out of step, with gaps between ---
   ground(-22, -34, 0xffe08a);
   [-36.5, -41.5, -46.5].forEach((z, i) =>
-    mover([2.2, 0.2, 2.5], [-2.2, -0.2, z], [2.2, -0.2, z], 7, { phase: i % 2 ? Math.PI : 0 }));
+    mover([1.5, 0.2, 2], [-2.6, -0.2, z], [2.6, -0.2, z], 6, { phase: i % 2 ? Math.PI : 0 }));
 
   // --- 3. A lift up to the top deck, called with a lever on the cliff face --------
   ground(-49, -62, 0xa8d8ff);

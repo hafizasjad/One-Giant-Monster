@@ -16,6 +16,11 @@ export function loadBest(levelId: string): Best | null {
   }
 }
 
+/** A level opens once the one before it has been finished on this device. */
+export function isUnlocked(levels: { id: string }[], i: number): boolean {
+  return i === 0 || loadBest(levels[i - 1].id) !== null;
+}
+
 /** Saves the run if it beats the stored one. Returns true for a new best. */
 export function saveBest(levelId: string, run: Best): boolean {
   const old = loadBest(levelId);
