@@ -5,6 +5,7 @@ import { buildLevel, MONSTER_Y } from '../src/game/level1.ts';
 import { buildLevel2 } from '../src/game/level2.ts';
 import { buildLevel3 } from '../src/game/level3.ts';
 import { buildLevel4 } from '../src/game/level4.ts';
+import { buildHub, hubDoorAt, hubDoorX } from '../src/game/hub.ts';
 import { LEVELS } from '../src/game/levels.ts';
 import { Simulation } from '../src/game/Simulation.ts';
 
@@ -520,5 +521,30 @@ describe('level 4: Lift Off', () => {
       expect(sim.fumbles).toBe(0);
     }
     expect(hit, 'some throw strength hits the target').toBeGreaterThan(0);
+  });
+});
+
+describe('the hub', () => {
+  const doors = [0, 1, 2, 3].map((i) => ({ name: `Level ${i}`, open: i < 2, note: '' }));
+
+  it('lets the monster walk into a door and never finishes', () => {
+    const sim = new Simulation(RAPIER, { chaos: false, level: buildHub(doors) });
+    const x = hubDoorX(1, 4);
+    run(sim, 20);
+    expect(hubDoorAt(sim.monster.pos.x, sim.monster.pos.z, 4)).toBe(-1);
+    let entered = -1;
+    for (let n = 0; n < 600 && entered < 0; n++) {
+      run(sim, 1, (i) => { i.legs.mz = -1; i.legs.mx = Math.max(-1, Math.min(1, x - sim.monster.pos.x)); });
+      entered = hubDoorAt(sim.monster.pos.x, sim.monster.pos.z, 4);
+    }
+    expect(entered).toBe(1);
+    run(sim, 200, (i) => { i.legs.mz = -1; }); // keep pushing: the doorway is a dead end
+    expect(sim.finished).toBe(false);
+    expect(sim.fumbles).toBe(0);
+  });
+
+  it('walking between two doors enters neither', () => {
+    const mid = (hubDoorX(1, 4) + hubDoorX(2, 4)) / 2;
+    for (let z = 4; z > -14; z -= 0.5) expect(hubDoorAt(mid, z, 4)).toBe(-1);
   });
 });

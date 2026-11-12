@@ -27,7 +27,11 @@ function sign(text: string, color = '#ff4f8b') {
   const c = document.createElement('canvas');
   c.width = 512; c.height = 128;
   const g = c.getContext('2d')!;
-  g.font = '900 72px "Trebuchet MS", sans-serif';
+  let px = 72;
+  g.font = `900 ${px}px "Trebuchet MS", sans-serif`;
+  // Long texts shrink to fit instead of being cut off.
+  const w = g.measureText(text).width;
+  if (w > 480) { px = Math.floor(px * 480 / w); g.font = `900 ${px}px "Trebuchet MS", sans-serif`; }
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.lineWidth = 14; g.strokeStyle = '#ffffff'; g.lineJoin = 'round';
   g.strokeText(text, 256, 68);
@@ -125,6 +129,7 @@ export class LevelView {
     for (const sg of L.signs) {
       const sp = sign(sg.text, sg.color);
       sp.position.set(sg.pos[0], sg.pos[1], sg.pos[2]);
+      sp.scale.multiplyScalar(sg.scale ?? 1);
       this.group.add(sp);
     }
 
@@ -181,7 +186,7 @@ export class LevelView {
     finishTex.wrapS = finishTex.wrapT = THREE.RepeatWrapping;
     finishTex.repeat.set(9, 1);
     const finishY = L.finishY ?? 0;
-    for (const sx of [-1, 1]) {
+    for (const sx of L.noFinish ? [] : [-1, 1]) {
       const p = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 6, 12), std(0xff5d8f));
       p.position.set(sx * 4.6, finishY + 3, L.finishZ);
       this.group.add(p);
@@ -190,7 +195,7 @@ export class LevelView {
     banner.position.set(0, finishY + 5.6, L.finishZ);
     const line = new THREE.Mesh(new THREE.BoxGeometry(10, 0.04, 1), new THREE.MeshStandardMaterial({ map: finishTex }));
     line.position.set(0, finishY + 0.02, L.finishZ);
-    this.group.add(banner, line);
+    if (!L.noFinish) this.group.add(banner, line);
 
     // Clouds drifting below the course
     const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });

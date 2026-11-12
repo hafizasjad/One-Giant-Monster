@@ -54,8 +54,9 @@ export interface Snapshot {
 
 // Messages between the two players (relayed verbatim by the server).
 export type PeerMsg =
-  | { k: 'lobby'; hostRole: Role; level: number }
-  | { k: 'start'; hostRole: Role; level: number }
+  | { k: 'lobby'; hostRole: Role }
+  /** level: index into LEVELS, or -1 for the hub; open: how many level doors the host has unlocked. */
+  | { k: 'start'; hostRole: Role; level: number; open: number }
   | { k: 'restart' }
   | { k: 'snap'; s: Snapshot }
   | { k: 'input'; role: Role; i: LegsInput | ArmsInput };

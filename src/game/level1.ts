@@ -46,13 +46,15 @@ export interface LevelDef {
    */
   movers: { id: number; a: V3; b: V3; period: number; phase?: number; lever?: number; returns?: boolean }[];
   /** Free-standing floating signs. */
-  signs: { text: string; pos: V3; color?: string }[];
+  signs: { text: string; pos: V3; color?: string; scale?: number }[];
   /** Score for finishing instantly; 10 points are lost per second. */
   timeBonus: number;
   stars: V3[];
   finishZ: number;
   /** Height of the floor at the finish line (default 0). */
   finishY?: number;
+  /** A place to hang around in (the hub): no finish line, no score. */
+  noFinish?: boolean;
   killY: number;
 }
 

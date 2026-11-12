@@ -349,7 +349,7 @@ export class Simulation {
       m.teleport(this.cp >= 0 ? L.checkpoints[this.cp].pos : L.spawn);
       this.emit('fumble', m.pos, FUMBLES[this.fumbles % FUMBLES.length]);
     }
-    if (!this.finished && m.pos.z < L.finishZ && m.grounded) {
+    if (!this.finished && !L.noFinish && m.pos.z < L.finishZ && m.grounded) {
       this.finished = true;
       this.finalScore = Math.max(0, L.timeBonus - Math.floor(this.playTime) * 10) + this.starCount * 200 - this.fumbles * 100;
       this.finalScore = Math.max(0, this.finalScore);
