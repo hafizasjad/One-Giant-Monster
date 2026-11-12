@@ -234,6 +234,9 @@ export class LevelView {
         top.needsUpdate = true;
         const side = std(new THREE.Color(e.color).multiplyScalar(0.6).getHex());
         material = [side, side, std(e.color, { map: top }), side, side, side];
+      } else if (e.tag === 'ice') {
+        const side = std(new THREE.Color(e.color).multiplyScalar(0.7).getHex());
+        material = [side, side, std(e.color, { roughness: 0.08, metalness: 0.15 }), side, side, side];
       } else if (e.tag === 'crate') {
         material = std(e.color, { map: crateTex });
       } else {
@@ -241,7 +244,7 @@ export class LevelView {
       }
       m = new THREE.Mesh(geo, material);
     }
-    m.castShadow = e.tag !== 'ground';
+    m.castShadow = e.tag !== 'ground' && e.tag !== 'ice';
     m.receiveShadow = true;
     return m;
   }

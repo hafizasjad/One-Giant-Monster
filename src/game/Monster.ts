@@ -8,6 +8,7 @@ export const MONSTER_HALF = 0.6; // capsule half height (segment)
 const SPEED = 6.2;
 const JUMP = 9.2;
 export const GRAVITY = 20;
+const ICE_ACCEL = 2.5; // how quickly the legs change the monster's speed on ice (normal ground: 14)
 
 export interface MonsterHooks {
   onJump(): void;
@@ -26,6 +27,8 @@ export class Monster {
   yaw = Math.PI; // facing -Z
   grounded = false;
   slick = false;
+  /** Standing on ice: same slide as `slick`, but set by the floor each step. */
+  icy = false;
   private coyote = 0;
   private jumpBuf = 0;
   private prevJump = false;
@@ -86,7 +89,7 @@ export class Monster {
     const len = Math.hypot(mx, mz);
     if (len > 1) { mx /= len; mz /= len; }
 
-    const accel = this.grounded ? (this.slick ? 1.4 : 14) : 5;
+    const accel = this.grounded ? (this.slick ? 1.4 : this.icy ? ICE_ACCEL : 14) : 5;
     const k = Math.min(1, accel * dt);
     this.vel.x += (mx * SPEED - this.vel.x) * k;
     this.vel.z += (mz * SPEED - this.vel.z) * k;

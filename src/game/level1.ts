@@ -10,7 +10,7 @@ export interface EntityDef {
   pos: V3;
   body: BodyKind;
   color: number;
-  tag: string; // ground, wall, crate, ball, boulder, door, bridge, drawbridge, hammer
+  tag: string; // ground, ice, wall, crate, ball, boulder, door, bridge, drawbridge, hammer
   density?: number;
   restitution?: number;
   friction?: number;

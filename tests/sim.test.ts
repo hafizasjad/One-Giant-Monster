@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { emptyInputs, type Inputs } from '../shared/protocol.ts';
 import { buildLevel, MONSTER_Y } from '../src/game/level1.ts';
 import { buildLevel2 } from '../src/game/level2.ts';
+import { buildLevel3 } from '../src/game/level3.ts';
 import { LEVELS } from '../src/game/levels.ts';
 import { Simulation } from '../src/game/Simulation.ts';
 
@@ -304,5 +305,122 @@ describe('level 2: Double Trouble', () => {
       }
       expect(hit, `target ${n + 1} can be hit`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('level 3: Frozen Flop', () => {
+  const make3 = () => new Simulation(RAPIER, { chaos: false, level: buildLevel3() });
+  /** Walk to a point the way a careful player would on ice: ease off near the target. */
+  function steer(sim: Simulation, x: number, z: number, steps = 400) {
+    for (let n = 0; n < steps; n++) {
+      const m = sim.monster;
+      const dx = x - m.pos.x, dz = z - m.pos.z, d = Math.hypot(dx, dz);
+      if (d < 0.6 && m.speed < 1) return;
+      // aim at where we want to be, minus where the slide is already taking us
+      const wx = dx * 1.2 - m.vel.x * 0.9, wz = dz * 1.2 - m.vel.z * 0.9, w = Math.max(1, Math.hypot(wx, wz));
+      run(sim, 1, (i) => { i.legs.mx = wx / w; i.legs.mz = wz / w; });
+    }
+  }
+
+  it('the monster keeps sliding on ice but stops quickly on snow', () => {
+    const slide = (z: number) => {
+      const sim = make3();
+      sim.monster.teleport([0, MONSTER_Y, z]);
+      run(sim, 20);
+      run(sim, 40, (i) => { i.legs.mx = 1; });
+      run(sim, 4, (i) => { i.legs.mx = -1; }); // tap the other way
+      const icy = sim.monster.icy;
+      const x0 = sim.monster.pos.x;
+      run(sim, 30);
+      return { icy, drift: sim.monster.pos.x - x0 };
+    };
+    const snow = slide(2), ice = slide(-20);
+    expect(snow.icy).toBe(false);
+    expect(ice.icy).toBe(true);
+    expect(snow.drift).toBeLessThan(0.3);
+    expect(ice.drift).toBeGreaterThan(0.6);
+  });
+
+  it('crates slide a long way on ice', () => {
+    const sim = make3();
+    const crate = sim.level.entities.findIndex((e) => e.tag === 'crate' && e.pos[2] === -73);
+    run(sim, 30);
+    sim.bodies[crate].setLinvel({ x: 0, y: 0, z: -5 }, true);
+    run(sim, 120);
+    expect(sim.bodies[crate].translation().z).toBeLessThan(-80);
+  });
+
+  it('sliding into the wall under the lever leaves it within reach', () => {
+    const sim = make3();
+    const lv = sim.level.levers[0];
+    sim.monster.teleport([lv.pos[0], MONSTER_Y, -20]);
+    run(sim, 20);
+    run(sim, 150, (i) => { i.legs.mz = -1; i.arms.ay = 1; });
+    tapGrab(sim);
+    expect(sim.levers[0]).toBe(true);
+    run(sim, 120);
+    steer(sim, 0, -24);
+    run(sim, 200, (i) => { i.legs.mz = -1; i.legs.mx = -sim.monster.pos.x; });
+    expect(sim.monster.pos.z).toBeLessThan(-31);
+    expect(sim.cp).toBe(0);
+  });
+
+  it('the narrow ice zigzag can be crossed with careful steering', () => {
+    const sim = make3();
+    sim.monster.teleport([0, MONSTER_Y, -33]);
+    run(sim, 20);
+    for (const [x, z] of [[-0.9, -41], [0, -46], [0.9, -51], [0, -56], [0, -61], [0, -66]]) steer(sim, x, z);
+    expect(sim.fumbles).toBe(0);
+    expect(sim.monster.pos.z).toBeLessThan(-64);
+    expect(sim.cp).toBe(1);
+  });
+
+  it('a crate slid into the pocket stays on the plate and holds the bridge out', () => {
+    const sim = make3();
+    const plate = sim.level.plates[0];
+    const crate = sim.level.entities.findIndex((e) => e.tag === 'crate' && e.pos[2] === -73);
+    run(sim, 30);
+    sim.bodies[crate].setTranslation({ x: 0, y: 0.6, z: -78 }, true);
+    sim.bodies[crate].setLinvel({ x: 0, y: 0, z: -6 }, true);
+    run(sim, 300);
+    expect(sim.plates[0]).toBe(true);
+    expect(sim.bodies[plate.bridge].translation().z).toBeCloseTo(plate.zOut, 1);
+
+    // round the pocket, onto the bridge, jump the gap
+    sim.monster.teleport([3.4, MONSTER_Y, -80]);
+    run(sim, 20);
+    steer(sim, 3.4, -87);
+    steer(sim, 0.5, -90.5);
+    run(sim, 150, (i) => { i.legs.mz = sim.monster.pos.z > -99.5 ? -1 : 0; i.legs.mx = -sim.monster.pos.x; i.legs.jump = sim.monster.pos.z < -94.3; });
+    expect(sim.monster.pos.z).toBeLessThan(-98.5);
+    expect(sim.fumbles).toBe(0);
+    expect(sim.cp).toBe(2);
+  });
+
+  it('a throw from the ice hits the target, and the drawbridge leads to the finish', () => {
+    let hit = -1;
+    for (let frames = 12; frames <= 54 && hit < 0; frames += 3) {
+      const sim = make3();
+      const tg = sim.level.targets[0];
+      const ball = sim.level.entities.findIndex((e) => e.tag === 'ball');
+      sim.monster.teleport([tg.pos[0], MONSTER_Y, -108]);
+      run(sim, 10);
+      run(sim, 25, (i) => { i.legs.mz = -0.5; });
+      run(sim, 60); // let the slide die down
+      if (sim.monster.pos.z < -111.5) continue;
+      const h = sim.arms.pos;
+      sim.bodies[ball].setTranslation({ x: h.x, y: h.y, z: h.z }, true);
+      tapGrab(sim);
+      run(sim, frames, (i) => { i.arms.throw = true; });
+      run(sim, 120);
+      if (!sim.targets[0]) continue;
+      hit = frames;
+      run(sim, 200);
+      steer(sim, 0, -110);
+      run(sim, 400, (i) => { i.legs.mz = sim.finished ? 0 : -1; i.legs.mx = -sim.monster.pos.x; });
+      expect(sim.finished).toBe(true);
+      expect(sim.fumbles).toBe(0);
+    }
+    expect(hit, 'some throw strength hits the target').toBeGreaterThan(0);
   });
 });

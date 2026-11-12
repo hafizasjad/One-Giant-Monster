@@ -74,6 +74,8 @@ export class Simulation {
       const body = this.world.createRigidBody(desc);
       const cd = e.shape === 'ball' ? R.ColliderDesc.ball(e.half[0]) : R.ColliderDesc.cuboid(e.half[0], e.half[1], e.half[2]);
       cd.setFriction(e.friction ?? 0.8).setRestitution(e.restitution ?? 0).setDensity(e.density ?? 1);
+      // Ice is slippery for whatever touches it, not just half as grippy.
+      if (e.tag === 'ice') cd.setFrictionCombineRule(R.CoefficientCombineRule.Min);
       const col = this.world.createCollider(cd, body);
       this.entityOf.set(col.handle, i);
       this.bodies.push(body);
@@ -156,6 +158,7 @@ export class Simulation {
 
     this.chaos.step(dt, this);
     this.moveMachines(dt);
+    this.monster.icy = this.onIce();
     this.monster.step(dt, inputs.legs, this.include, {
       onJump: () => this.emit('jump', this.monster.pos),
       onLand: (impact) => this.emit('land', this.monster.pos, impact > 14 ? 'THUD!' : undefined),
@@ -214,6 +217,14 @@ export class Simulation {
     const b = this.bodies[t.bridge];
     b.setTranslation(pos, true);
     b.setRotation(rot, true);
+  }
+
+  /** Is the monster standing on an ice slab? */
+  private onIce() {
+    const m = this.monster;
+    return this.level.entities.some((e) => e.tag === 'ice'
+      && Math.abs(m.pos.x - e.pos[0]) < e.half[0] + 0.3 && Math.abs(m.pos.z - e.pos[2]) < e.half[2] + 0.3
+      && Math.abs(m.feetY - (e.pos[1] + e.half[1])) < 0.6);
   }
 
   // --- rules ---------------------------------------------------------------
