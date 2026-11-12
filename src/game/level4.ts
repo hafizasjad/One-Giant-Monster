@@ -78,5 +78,6 @@ export function buildLevel4(): LevelDef {
     finishY: TOP,
     killY: -10,
     timeBonus: 3600,
+    theme: { sky: 0xb7a6ff, sun: 0xffe2f0, clouds: 0xf3ecff, scenery: 'balloons' },
   };
 }

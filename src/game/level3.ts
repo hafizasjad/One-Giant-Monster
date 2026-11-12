@@ -91,5 +91,6 @@ export function buildLevel3(): LevelDef {
     finishZ: -128,
     killY: -10,
     timeBonus: 3600,
+    theme: { sky: 0xd4ecff, sun: 0xeaf4ff, clouds: 0xffffff, scenery: 'pines' },
   };
 }

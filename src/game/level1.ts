@@ -25,6 +25,16 @@ export interface HammerDef {
   phase: number;
 }
 
+/** Looks only: nothing here affects the simulation. */
+export interface Theme {
+  sky: number;
+  /** Sunlight colour (default warm white). */
+  sun?: number;
+  clouds?: number;
+  /** What floats beside the course. */
+  scenery?: 'trees' | 'pillars' | 'pines' | 'balloons';
+}
+
 export interface LevelDef {
   entities: EntityDef[];
   movable: number[]; // entity indices that are not fixed, in snapshot order
@@ -53,6 +63,8 @@ export interface LevelDef {
   finishZ: number;
   /** Height of the floor at the finish line (default 0). */
   finishY?: number;
+  /** How the world around the course looks (default: blue sky, no scenery). */
+  theme?: Theme;
   /** A place to hang around in (the hub): no finish line, no score. */
   noFinish?: boolean;
   killY: number;
@@ -137,6 +149,7 @@ export function buildLevel(): LevelDef {
     boulders: [{ ids: boulderIds, z: -65, y: 1.2, speed: 8, interval: 3.2, from: -41, to: -70 }],
     signs: [{ text: 'THROW A BALL', pos: [-3.6, 2.4, -74.5], color: '#7c5cff' }],
     timeBonus: 3000,
+    theme: { sky: 0x8fdcff, scenery: 'trees' },
     stars: [
       [0, 1.5, -4], [-3, 4.3, -13], [3, 1.5, -16], [0, 1.5, -25],
       [0, 2.6, -40.5], [-4, 1.5, -52.5], [4, 4.3, -63.5], [0, 1.5, -82],

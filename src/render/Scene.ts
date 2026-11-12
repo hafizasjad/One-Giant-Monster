@@ -31,6 +31,7 @@ export class GameView {
 
     this.scene.background = new THREE.Color(0x8fdcff);
     this.scene.fog = new THREE.Fog(0x8fdcff, 45, 130);
+    this.applyTheme(level);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x88aacc, 1.5));
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -60,7 +61,16 @@ export class GameView {
     this.levelView.dispose();
     this.levelView = new LevelView(level);
     this.scene.add(this.levelView.group);
+    this.applyTheme(level);
     this.reset();
+  }
+
+  /** Sky, haze and sunlight in the level's colours. */
+  private applyTheme(level: LevelDef) {
+    const sky = level.theme?.sky ?? 0x8fdcff;
+    (this.scene.background as THREE.Color).setHex(sky);
+    this.scene.fog!.color.setHex(sky);
+    this.sun.color.setHex(level.theme?.sun ?? 0xfff4dd);
   }
 
   reset() {

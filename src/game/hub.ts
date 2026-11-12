@@ -72,5 +72,6 @@ export function buildHub(doors: HubDoor[], banner = 'PICK A DOOR'): LevelDef {
     noFinish: true,
     killY: -10,
     timeBonus: 0,
+    theme: { sky: 0x9fe6d8, clouds: 0xffffff, scenery: 'trees' },
   };
 }

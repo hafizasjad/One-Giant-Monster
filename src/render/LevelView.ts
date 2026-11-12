@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Snapshot } from '../../shared/protocol.ts';
-import { MONSTER_Y, type EntityDef, type LevelDef } from '../game/level1.ts';
+import { MONSTER_Y, type EntityDef, type LevelDef, type Theme } from '../game/level1.ts';
 
 function canvasTexture(size: number, draw: (g: CanvasRenderingContext2D, s: number) => void) {
   const c = document.createElement('canvas');
@@ -59,8 +59,69 @@ function starGeometry() {
 const std = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...extra });
 
+const part = (g: THREE.BufferGeometry, color: number, y: number, x = 0, z = 0) => {
+  const m = new THREE.Mesh(g, std(color, { flatShading: true }));
+  m.position.set(x, y, z);
+  return m;
+};
+
+/** A little floating island: flat top, rocky point underneath. */
+function island(top: number, under: number, r: number) {
+  const g = new THREE.Group();
+  const rock = part(new THREE.ConeGeometry(r * 0.85, r * 1.6, 9), under, -0.6 - r * 0.8);
+  rock.rotation.x = Math.PI;
+  g.add(part(new THREE.CylinderGeometry(r, r * 0.85, 0.6, 9), top, -0.3), rock);
+  return g;
+}
+
+/** Scenery pieces, one builder per theme. They are only looked at, never touched. */
+const PROPS: Record<NonNullable<Theme['scenery']>, (rnd: () => number) => THREE.Group> = {
+  trees(rnd) {
+    const g = island(0x8fd66a, 0x9a7b5a, 2.4);
+    const n = 1 + Math.floor(rnd() * 3);
+    for (let i = 0; i < n; i++) {
+      const x = (rnd() - 0.5) * 2.6, z = (rnd() - 0.5) * 2.6, h = 0.8 + rnd() * 0.8;
+      g.add(part(new THREE.CylinderGeometry(0.14, 0.2, h, 6), 0x8a5a3a, h / 2, x, z));
+      g.add(part(new THREE.IcosahedronGeometry(0.7 + rnd() * 0.4, 1), [0x4fbf5a, 0x6fd06a, 0xff9ecb][Math.floor(rnd() * 3)], h + 0.6, x, z));
+    }
+    return g;
+  },
+  pines(rnd) {
+    const g = island(0xf4f8ff, 0x9cc4e8, 2.2);
+    const n = 1 + Math.floor(rnd() * 3);
+    for (let i = 0; i < n; i++) {
+      const x = (rnd() - 0.5) * 2.4, z = (rnd() - 0.5) * 2.4, s = 0.8 + rnd() * 0.6;
+      g.add(part(new THREE.CylinderGeometry(0.12, 0.16, 0.6 * s, 6), 0x7a5a3a, 0.3 * s, x, z));
+      g.add(part(new THREE.ConeGeometry(0.8 * s, 1.7 * s, 7), 0x3f8f6a, 1.4 * s, x, z));
+      g.add(part(new THREE.ConeGeometry(0.5 * s, 1.0 * s, 7), 0xffffff, 2.2 * s, x, z));
+    }
+    return g;
+  },
+  pillars(rnd) {
+    const g = new THREE.Group();
+    const h = 7 + rnd() * 6, r = 1.1 + rnd() * 0.8;
+    g.add(part(new THREE.CylinderGeometry(r, r * 1.3, h, 7), 0xd98a5a, -h / 2));
+    g.add(part(new THREE.CylinderGeometry(r * 1.15, r, 0.5, 7), 0xf2b27a, 0.25));
+    if (rnd() > 0.4) { // a cactus on top
+      g.add(part(new THREE.CylinderGeometry(0.22, 0.22, 1.4, 7), 0x4fa86a, 1.2));
+      g.add(part(new THREE.CylinderGeometry(0.15, 0.15, 0.7, 7), 0x4fa86a, 1.3, 0.45));
+    }
+    return g;
+  },
+  balloons(rnd) {
+    const g = new THREE.Group();
+    const color = [0xff5d8f, 0xffd23f, 0x58c4ff, 0x7ee081, 0xff8a3d][Math.floor(rnd() * 5)];
+    const top = part(new THREE.SphereGeometry(1.7, 12, 10), color, 3);
+    top.scale.y = 1.15;
+    g.add(top, part(new THREE.ConeGeometry(1.1, 1.4, 12), color, 1.2), part(new THREE.BoxGeometry(0.7, 0.6, 0.7), 0x8a5a3a, 0));
+    g.children[1].rotation.x = Math.PI;
+    return g;
+  },
+};
+
 export class LevelView {
   group = new THREE.Group();
+  private floaters: { o: THREE.Object3D; y: number; p: number }[] = [];
   private meshes: THREE.Mesh[] = [];
   private levers: THREE.Group[] = [];
   private leverAngles: number[] = [];
@@ -198,7 +259,7 @@ export class LevelView {
     if (!L.noFinish) this.group.add(banner, line);
 
     // Clouds drifting below the course
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
+    const cloudMat = new THREE.MeshStandardMaterial({ color: L.theme?.clouds ?? 0xffffff, roughness: 1 });
     const cg = new THREE.SphereGeometry(1, 10, 8);
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -214,6 +275,24 @@ export class LevelView {
       cloud.position.set(side * (15 + rnd() * 26), -7 - rnd() * 10, 10 - rnd() * (30 - L.finishZ));
       cloud.scale.setScalar(0.8 + rnd() * 1.1);
       this.group.add(cloud);
+    }
+
+    // Scenery floating on both sides, clear of the course
+    const kind = L.theme?.scenery;
+    if (kind) {
+      const fixed = L.entities.filter((e) => e.body === 'fixed');
+      const halfW = Math.max(5, ...fixed.map((e) => Math.abs(e.pos[0]) + e.half[0]));
+      const zFar = Math.min(...fixed.map((e) => e.pos[2] - e.half[2])) - 12;
+      const count = Math.ceil((12 - zFar) / 6);
+      for (let i = 0; i < count; i++) {
+        const prop = PROPS[kind](rnd);
+        const y = kind === 'balloons' ? 2 + rnd() * 12 : -1.5 - rnd() * 5;
+        prop.position.set((i % 2 ? 1 : -1) * (halfW + 6 + rnd() * 15), y, 12 - (i + rnd()) * 6);
+        prop.rotation.y = rnd() * Math.PI * 2;
+        prop.scale.setScalar(0.8 + rnd() * 0.8);
+        this.floaters.push({ o: prop, y, p: rnd() * 6 });
+        this.group.add(prop);
+      }
     }
   }
 
@@ -300,6 +379,8 @@ export class LevelView {
       arm.quaternion.setFromUnitVectors(up, d.normalize());
       this.meshes[h.head].quaternion.copy(arm.quaternion);
     });
+
+    for (const f of this.floaters) f.o.position.y = f.y + Math.sin(time * 0.7 + f.p) * 0.35;
 
     this.flags.forEach((f, i) => {
       (f.material as THREE.MeshStandardMaterial).color.setHex(i <= s.cp ? 0x58e06a : 0xbbbbbb);
