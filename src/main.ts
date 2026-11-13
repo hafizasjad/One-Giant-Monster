@@ -49,6 +49,10 @@ let guest: GuestSession | null = null;
 let net: NetClient | null = null;
 let hostRole: Role = 'legs';
 let peerHere = false;
+/** Online: counts the games started in this room, so stray snapshots of the previous one are ignored. */
+let run = 0;
+/** Shows the room code, and whether the two players are linked directly or through the server. */
+const roomLabel = () => { if (net && mode !== 'local') $('whoText').textContent = `Room ${net.code}${net.direct ? ' ⚡' : ''}`; };
 let inGame = false;
 let lastSnap: Snapshot | null = null;
 let resultsTimer = 0;
@@ -133,19 +137,21 @@ function startLocal(levelIdx: number) {
   useControls('shared');
 }
 
-const sendStart = () => net?.send({ k: 'start', hostRole, level: levelIndex, open: hubOpen });
+const sendStart = () => net?.send({ k: 'start', hostRole, level: levelIndex, open: hubOpen, run });
 
 function startHosting(levelIdx: number) {
   const role = hostRole;
   useLevel(levelIdx);
+  run++;
   setSession(new HostSession(RAPIER, {
     net: net!,
+    run,
     level: buildCurrent,
     chaos: levelIdx !== HUB,
     local: () => (role === 'legs' ? { legs: kb.legs('solo') } : { arms: kb.arms('solo') }),
   }), 'host');
   show('lobby', false);
-  $('whoText').textContent = `Room ${net!.code}`;
+  roomLabel();
   useControls(role);
   sendStart();
 }
@@ -154,7 +160,7 @@ function startGuest(role: Role, levelIdx: number, open: number) {
   useLevel(levelIdx, open);
   setSession(new GuestSession(net!, role, () => (role === 'legs' ? kb.legs('solo') : kb.arms('solo'))), 'guest');
   show('lobby', false);
-  $('whoText').textContent = `Room ${net!.code}`;
+  roomLabel();
   useControls(role);
 }
 
@@ -188,6 +194,8 @@ async function createRoom() {
     return toMenu((e as Error).message);
   }
   peerHere = false;
+  run = 0;
+  net.onLink = roomLabel;
   net.onPeerJoined = () => {
     peerHere = true;
     if (mode === 'host' && host) {
@@ -227,10 +235,11 @@ async function joinRoom() {
   }
   net.onPeerMsg = (m: PeerMsg) => {
     if (m.k === 'lobby') { hostRole = m.hostRole; renderLobby(false); }
-    else if (m.k === 'start') { hostRole = m.hostRole; startGuest(otherRole(m.hostRole), m.level, m.open); }
-    else if (m.k === 'snap') guest?.receive(m.s);
+    else if (m.k === 'start') { hostRole = m.hostRole; run = m.run; startGuest(otherRole(m.hostRole), m.level, m.open); }
+    else if (m.k === 'snap') { if (m.run === run) guest?.receive(m.s); }
     else if (m.k === 'restart') { guest?.clear(); view.reset(); show('results', false); resultsTimer = 0; }
   };
+  net.onLink = roomLabel;
   net.onPeerLeft = () => toMenu('The host left the room.');
   net.onClose = () => toMenu('Lost connection to the game server.');
   renderLobby(false);

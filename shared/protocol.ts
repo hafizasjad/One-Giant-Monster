@@ -56,9 +56,12 @@ export interface Snapshot {
 export type PeerMsg =
   | { k: 'lobby'; hostRole: Role }
   /** level: index into LEVELS, or -1 for the hub; open: how many level doors the host has unlocked. */
-  | { k: 'start'; hostRole: Role; level: number; open: number }
+  | { k: 'start'; hostRole: Role; level: number; open: number; run: number }
   | { k: 'restart' }
-  | { k: 'snap'; s: Snapshot }
+  /** run: which 'start' this snapshot belongs to (snapshots can overtake the start message). */
+  | { k: 'snap'; s: Snapshot; run: number }
+  /** Setting up the direct phone-to-phone link (handled inside NetClient). */
+  | { k: 'rtc'; sdp?: unknown; ice?: unknown }
   | { k: 'input'; role: Role; i: LegsInput | ArmsInput };
 
 export const otherRole = (r: Role): Role => (r === 'legs' ? 'arms' : 'legs');

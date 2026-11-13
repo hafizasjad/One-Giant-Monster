@@ -14,6 +14,8 @@ export interface HostOptions {
   /** Inputs read from this machine. Roles left out come from the network (or stay idle). */
   local: () => Partial<Inputs>;
   net?: NetClient;
+  /** Stamped on every snapshot so the guest can tell which game it belongs to. */
+  run?: number;
   chaos?: boolean;
   /** Builds the course to play (a fresh copy per run). Defaults to the first level. */
   level?: () => LevelDef;
@@ -82,7 +84,7 @@ export class HostSession implements Session {
       this.sendAcc += dt;
       if (this.sendAcc >= SEND_INTERVAL) {
         this.sendAcc = 0;
-        net.send({ k: 'snap', s: { ...this.last, ev: this.outbox } });
+        net.send({ k: 'snap', run: this.opts.run ?? 0, s: { ...this.last, ev: this.outbox } });
         this.outbox = [];
       }
     }

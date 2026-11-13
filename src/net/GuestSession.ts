@@ -2,7 +2,9 @@ import type { ArmsInput, GameEvent, LegsInput, Role, Snapshot } from '../../shar
 import type { Session } from './HostSession.ts';
 import type { NetClient } from './NetClient.ts';
 
-const DELAY = 0.1; // render this far behind the newest snapshot so there is always something to blend
+// Render a little behind the newest snapshot so there is always something to blend.
+// How far behind follows the connection: steady links get the minimum, jittery ones more.
+const MIN_DELAY = 0.08, MAX_DELAY = 0.3;
 const INPUT_INTERVAL = 1 / 30;
 
 /** The non-host player: sends its own input, draws interpolated snapshots from the host. */
@@ -11,24 +13,33 @@ export class GuestSession implements Session {
   private events: GameEvent[] = [];
   private offset: number | null = null; // local clock - sim clock
   private sendAcc = 0;
+  private jitter = 0; // typical lateness of a snapshot, seconds
+  private delay = 0.1;
   private lastSent = '';
 
   constructor(private net: NetClient, private role: Role, private input: () => LegsInput | ArmsInput) {}
 
   receive(s: Snapshot) {
     const last = this.buf[this.buf.length - 1];
-    if (last && s.t < last.t) this.clear(); // host restarted
+    if (last && s.t < last.t - 1) this.clear(); // host restarted
+    this.events.push(...s.ev);
+    // The direct link does not keep order: a snapshot that was overtaken is of no use.
+    if (this.buf.length && s.t <= this.buf[this.buf.length - 1].t) return;
     this.buf.push(s);
     if (this.buf.length > 30) this.buf.shift();
-    this.events.push(...s.ev);
     const off = performance.now() / 1000 - s.t;
-    this.offset = this.offset === null ? off : this.offset + (off - this.offset) * 0.05;
+    if (this.offset === null) this.offset = off;
+    else {
+      this.jitter += (Math.abs(off - this.offset) - this.jitter) * 0.1;
+      this.offset += (off - this.offset) * 0.05;
+    }
   }
 
   clear() {
     this.buf = [];
     this.events = [];
     this.offset = null;
+    this.jitter = 0;
   }
 
   update(dt: number): Snapshot | null {
@@ -42,7 +53,9 @@ export class GuestSession implements Session {
     }
 
     if (!this.buf.length || this.offset === null) return null;
-    const t = performance.now() / 1000 - this.offset - DELAY;
+    const want = Math.max(MIN_DELAY, Math.min(MAX_DELAY, 0.06 + this.jitter * 3));
+    this.delay += (want - this.delay) * Math.min(1, dt);
+    const t = performance.now() / 1000 - this.offset - this.delay;
     let a = this.buf[0], b = this.buf[this.buf.length - 1];
     for (let n = this.buf.length - 1; n > 0; n--) {
       if (this.buf[n - 1].t <= t) { a = this.buf[n - 1]; b = this.buf[n]; break; }
