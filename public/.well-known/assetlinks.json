@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.onrender.one_giant_monster.twa",
+      "sha256_cert_fingerprints": [
+        "2C:62:97:1E:07:32:EF:29:9A:DF:1E:C3:5B:E7:57:7F:3C:28:14:69:DA:26:4E:BD:D5:3D:81:56:4B:20:00:27"
+      ]
+    }
+  }
+]
