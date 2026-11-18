@@ -1,27 +1,45 @@
 // Relay server: rooms of two players, messages forwarded verbatim. No game logic.
-// In production it also serves the built game from dist/.
+// In dev (--dev) it mounts Vite middleware; in production it serves the built game from dist/.
 // Runs directly with Node (type stripping), so keep this file to erasable TypeScript.
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-// In dev (--dev) the relay always sits on 3001 behind Vite's /ws proxy.
-const PORT = process.argv.includes('--dev') ? 3001 : Number(process.env.PORT ?? 3001);
+const isDev = process.argv.includes('--dev');
+const PORT = Number(process.env.PORT ?? 3000);
 const DIST = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'dist');
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.wasm': 'application/wasm', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json', '.json': 'application/json',
 };
 
+let viteMiddlewares: ((req: IncomingMessage, res: ServerResponse, next: () => void) => void) | null = null;
+if (isDev) {
+  const { createServer: createViteServer } = await import('vite');
+  const vite = await createViteServer({
+    server: { middlewareMode: true, hmr: false, allowedHosts: true } as Record<string, unknown>,
+    appType: 'spa',
+  });
+  viteMiddlewares = vite.middlewares;
+}
+
 const http = createServer((req, res) => {
+  if (viteMiddlewares) {
+    viteMiddlewares(req, res, () => {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('Not found');
+    });
+    return;
+  }
   const path = normalize(decodeURIComponent((req.url ?? '/').split('?')[0])).replace(/^([/\\]|\.\.)+/, '');
   let file = join(DIST, path || 'index.html');
   if (!file.startsWith(DIST) || !existsSync(file) || statSync(file).isDirectory()) file = join(DIST, 'index.html');
   if (!existsSync(file)) {
     res.writeHead(404, { 'content-type': 'text/plain' });
-    res.end('Game not built yet. Run "npm run build", or use "npm run dev" and open the Vite URL.');
+    res.end('Game not built yet. Run "npm run build", or use "npm run dev".');
     return;
   }
   res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
@@ -84,4 +102,4 @@ wss.on('connection', (ws) => {
   });
 });
 
-http.listen(PORT, () => console.log(`One Giant Monster server on http://localhost:${PORT}`));
+http.listen(PORT, '0.0.0.0', () => console.log(`One Giant Monster server on http://0.0.0.0:${PORT}`));

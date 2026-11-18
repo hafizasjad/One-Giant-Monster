@@ -8,7 +8,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client", "vite-plugin-pwa/client"]
   },
   "include": ["src", "shared", "server", "tests", "vite.config.ts"]
 }

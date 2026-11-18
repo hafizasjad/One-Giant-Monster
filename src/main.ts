@@ -9,6 +9,7 @@ import { Input } from './input/Input.ts';
 import { GuestSession } from './net/GuestSession.ts';
 import { HostSession, type Session } from './net/HostSession.ts';
 import { NetClient } from './net/NetClient.ts';
+import { initPWA } from './pwa.ts';
 import { GameView } from './render/Scene.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -333,6 +334,7 @@ if (import.meta.env.DEV) (window as any).__game = {
 
 // --- main loop ---------------------------------------------------------------
 
+initPWA();
 toMenu();
 let prev = performance.now();
 function tick(now: number, draw: boolean) {

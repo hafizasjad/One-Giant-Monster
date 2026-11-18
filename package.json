@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,web -c magenta,cyan \"node server/index.ts --dev\" \"vite\"",
+    "dev": "node server/index.ts --dev",
     "build": "tsc --noEmit && vite build",
     "start": "node server/index.ts",
     "test": "vitest run"
@@ -21,6 +21,7 @@
     "concurrently": "^9.1.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
+    "vite-plugin-pwa": "^2.0.0",
     "vitest": "^2.1.5"
   }
 }

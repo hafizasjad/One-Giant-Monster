@@ -4,6 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="google-site-verification" content="XeHRpesE7p0NGbbUwMCY-KVBqY94i8OrJHJKBfliOKo" />
+  <meta name="description" content="One wobbly monster with two brains: the legs and the arms. Play solo or online with a friend." />
+  <meta property="og:title" content="One Giant Monster" />
+  <meta property="og:description" content="One wobbly monster with two brains: the legs and the arms. Play solo or online with a friend." />
+  <meta name="theme-color" content="#7c5cff" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GiantMonster" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
   <title>One Giant Monster</title>
   <style>
     :root { --ink: #2a1b4d; --purple: #7c5cff; --pink: #ff4f8b; --yellow: #ffd23f; --paper: #fffaf0; }
@@ -119,6 +130,10 @@
       .error { min-height: 0; }
     }
     @media (prefers-reduced-motion: reduce) { .popup, #chaos.warn { animation: none; } }
+    #offlineBanner { position: fixed; bottom: 14px; left: 14px; z-index: 40; background: var(--yellow); color: var(--ink);
+      font-size: 14px; pointer-events: none; display: flex; align-items: center; gap: 8px; }
+    #offlineBanner i { width: 10px; height: 10px; border-radius: 50%; background: var(--pink); border: 2px solid var(--ink); display: inline-block; }
+    #btnInstall { background: var(--purple); color: #fff; }
   </style>
 </head>
 <body>
@@ -146,10 +161,23 @@
           <input id="joinCode" maxlength="4" placeholder="CODE" aria-label="Room code" autocomplete="off" />
           <button id="btnJoin" class="alt">Join room</button>
         </div>
+        <button id="btnInstall" class="hidden">Install App</button>
         <div id="menuError" class="error" role="alert"></div>
       </div>
     </div>
   </div>
+
+  <div id="iosInstallModal" class="screen hidden" role="dialog" aria-modal="true" aria-labelledby="iosGuideTitle">
+    <div class="card">
+      <h2 id="iosGuideTitle">Install on iPhone / iPad</h2>
+      <p>1. Tap the <b>Share</b> button in Safari's toolbar.<br />2. Scroll down and tap <b>Add to Home Screen</b>.</p>
+      <div class="stack">
+        <button id="btnCloseIosGuide" class="alt">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="offlineBanner" class="chip hidden" role="status" aria-live="polite"><i></i><span>Offline mode — solo play ready</span></div>
 
   <div id="lobby" class="screen hidden">
     <div class="card">

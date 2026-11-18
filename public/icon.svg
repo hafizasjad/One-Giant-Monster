@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#8fdcff"/>
+  <circle cx="256" cy="460" r="180" fill="#7dee8b" stroke="#2a1b4d" stroke-width="16"/>
+  <!-- Horns -->
+  <path d="M168 158 L130 76 L206 124 Z" fill="#fff1c1" stroke="#2a1b4d" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M344 158 L382 76 L306 124 Z" fill="#fff1c1" stroke="#2a1b4d" stroke-width="14" stroke-linejoin="round"/>
+  <!-- Arms -->
+  <path d="M112 280 Q68 250 86 206" fill="none" stroke="#7c5cff" stroke-width="34" stroke-linecap="round"/>
+  <path d="M112 280 Q68 250 86 206" fill="none" stroke="#2a1b4d" stroke-width="48" stroke-linecap="round" opacity="0"/>
+  <circle cx="84" cy="202" r="28" fill="#ffb14e" stroke="#2a1b4d" stroke-width="14"/>
+  <path d="M400 280 Q444 250 426 206" fill="none" stroke="#7c5cff" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="428" cy="202" r="28" fill="#ffb14e" stroke="#2a1b4d" stroke-width="14"/>
+  <!-- Body -->
+  <ellipse cx="256" cy="274" rx="156" ry="166" fill="#7c5cff" stroke="#2a1b4d" stroke-width="16"/>
+  <!-- Belly -->
+  <ellipse cx="256" cy="348" rx="96" ry="74" fill="#cbbcff"/>
+  <!-- Eyes -->
+  <circle cx="204" cy="212" r="46" fill="#ffffff" stroke="#2a1b4d" stroke-width="14"/>
+  <circle cx="308" cy="212" r="46" fill="#ffffff" stroke="#2a1b4d" stroke-width="14"/>
+  <circle cx="212" cy="216" r="21" fill="#1b1330"/>
+  <circle cx="300" cy="216" r="21" fill="#1b1330"/>
+  <circle cx="220" cy="206" r="7" fill="#ffffff"/>
+  <circle cx="308" cy="206" r="7" fill="#ffffff"/>
+  <!-- Mouth & Teeth -->
+  <path d="M188 282 Q256 322 324 282 Q298 338 256 338 Q214 338 188 282 Z" fill="#3a1140" stroke="#2a1b4d" stroke-width="12" stroke-linejoin="round"/>
+  <polygon points="210,287 224,318 238,292" fill="#ffffff" stroke="#2a1b4d" stroke-width="6" stroke-linejoin="round"/>
+  <polygon points="274,292 288,318 302,287" fill="#ffffff" stroke="#2a1b4d" stroke-width="6" stroke-linejoin="round"/>
+  <!-- Star badge -->
+  <polygon points="416,96 427,120 454,123 434,142 439,168 416,155 393,168 398,142 378,123 405,120" fill="#ffd23f" stroke="#2a1b4d" stroke-width="10" stroke-linejoin="round"/>
+</svg>
